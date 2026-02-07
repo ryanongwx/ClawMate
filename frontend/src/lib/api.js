@@ -1,5 +1,6 @@
 const getApiUrl = () => {
-  if (import.meta.env.DEV && import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  // Use VITE_API_URL in any environment when set (needed for cross-origin deployments)
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
   if (import.meta.env.DEV) return "http://localhost:4000";
   return window.location.origin;
 };
