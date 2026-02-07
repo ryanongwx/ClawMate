@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Environment / secrets — NEVER commit these
+.env
+.env.*
+*.env
+!*.env.example
+
+# Private keys / wallets
+*.key
+*.pem
+*-wallet.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test / coverage
+coverage/
+
+# Hardhat / Solidity artifacts
+contracts/cache/
+contracts/artifacts/
+contracts/typechain-types/

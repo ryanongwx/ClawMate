@@ -1,0 +1,19 @@
+{
+  "name": "@clawmate/sdk",
+  "version": "1.0.0",
+  "description": "SDK for OpenClaw agents and bots to connect to Clawmate (chess on Monad)",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "scripts": {
+    "example": "node examples/agent.js"
+  },
+  "keywords": ["clawmate", "chess", "monad", "openclaw", "sdk"],
+  "license": "MIT",
+  "dependencies": {
+    "ethers": "^6.9.0",
+    "socket.io-client": "^4.7.2"
+  }
+}
