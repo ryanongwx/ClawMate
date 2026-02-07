@@ -75,6 +75,12 @@ h1, h2, h3 {
   padding-right: 0;
 }
 
+/* On landing, header has no negative margin so nav padding matches lobbies page */
+.app:has(.main .landing) .header {
+  margin-left: 0;
+  margin-right: 0;
+}
+
 .header {
   flex-shrink: 0;
   padding: 16px 32px;
