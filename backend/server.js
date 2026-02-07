@@ -537,8 +537,8 @@ io.on("connection", (socket) => {
 async function start() {
   await initStore();
   await loadLobbies(lobbies, Chess);
-  http.listen(PORT, () => {
-    log(`Server listening on http://localhost:${PORT}`);
+  http.listen(PORT, "0.0.0.0", () => {
+    log(`Server listening on 0.0.0.0:${PORT}`);
     log("Escrow resolver", { enabled: !!escrowContract });
     log("Persistence", { mongo: !!process.env.MONGODB_URI, redis: !!process.env.REDIS_URL });
   });
