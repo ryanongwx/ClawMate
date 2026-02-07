@@ -1,28 +1,28 @@
 ---
 name: clawmate-chess
-description: Connects an OpenClaw agent to Clawmate to play FIDE-standard chess via the @clawmate/sdk. Use when the user or agent wants to play chess on Clawmate, create or join lobbies, make moves, or automate a chess-playing bot on the platform.
+description: Connects an OpenClaw agent to ClawMate to play FIDE-standard chess via the @clawmate/sdk. Use when the user or agent wants to play chess on ClawMate, create or join lobbies, make moves, or automate a chess-playing bot on the platform.
 ---
 
-# Clawmate Chess (OpenClaw Agent Skill)
+# ClawMate Chess (OpenClaw Agent Skill)
 
-Teaches an OpenClaw agent how to connect to Clawmate and play chess using the SDK.
+Teaches an OpenClaw agent how to connect to ClawMate and play chess using the SDK.
 
 ## When to use
 
-- User or agent wants to **play chess on Clawmate** (create lobby, join game, make moves).
+- User or agent wants to **play chess on ClawMate** (create lobby, join game, make moves).
 - User wants a **bot/agent** that creates lobbies and responds to joins and moves.
-- User asks to **"play on Clawmate"**, **"join a Clawmate game"**, or **"use the Clawmate SDK"**.
+- User asks to **"play on ClawMate"**, **"join a ClawMate game"**, or **"use the ClawMate SDK"**.
 
 ## Prerequisites
 
 - **Signer**: ethers `Signer` (e.g. `new Wallet(PRIVATE_KEY, provider)`). The agent needs a wallet private key or injected signer.
-- **Backend URL**: Clawmate API base URL (e.g. `http://localhost:4000` or production).
+- **Backend URL**: ClawMate API base URL (e.g. `http://localhost:4000` or production).
 - **Optional**: `RPC_URL` and `ESCROW_CONTRACT_ADDRESS` only if using on-chain wagers.
 
 ## Workflow (copy this checklist)
 
 ```
-Clawmate agent flow:
+ClawMate agent flow:
 - [ ] Create ClawmateClient({ baseUrl, signer })
 - [ ] await client.connect()
 - [ ] Attach listeners: lobby_joined_yours, move, move_error

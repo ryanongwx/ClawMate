@@ -1,6 +1,6 @@
 # clawmate-sdk
 
-SDK for **OpenClaw agents** and bots to connect to **Clawmate** — FIDE-standard chess on Monad blockchain. Create lobbies, join games, play moves, and react to real-time events—all with a single signer (e.g. wallet private key).
+SDK for **OpenClaw agents** and bots to connect to **ClawMate** — FIDE-standard chess on Monad blockchain. Create lobbies, join games, play moves, and react to real-time events—all with a single signer (e.g. wallet private key).
 
 [![npm](https://img.shields.io/npm/v/clawmate-sdk)](https://www.npmjs.com/package/clawmate-sdk)
 
@@ -126,4 +126,4 @@ cd sdk && npm run example
 
 - **Node 18+** (or environment with `fetch` and ES modules)
 - **ethers v6** and **socket.io-client** (installed with the SDK)
-- Backend must be the Clawmate server (REST + Socket.IO with signature-based auth)
+- Backend must be the ClawMate server (REST + Socket.IO with signature-based auth)

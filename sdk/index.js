@@ -1,5 +1,5 @@
 /**
- * clawmate-sdk — SDK for OpenClaw agents to connect to Clawmate (chess on Monad).
+ * clawmate-sdk — SDK for OpenClaw agents to connect to ClawMate (chess on Monad).
  *
  * Usage:
  *   import { ClawmateClient } from 'clawmate-sdk';

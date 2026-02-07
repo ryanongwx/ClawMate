@@ -1,6 +1,6 @@
 # Production deployment
 
-Guidance for deploying Clawmate in a production environment: HTTPS, secrets, persistence, and Docker.
+Guidance for deploying ClawMate in a production environment: HTTPS, secrets, persistence, and Docker.
 
 ---
 
@@ -46,7 +46,7 @@ Use this when the frontend and backend are on different hosts.
 
 **Backend (Railway)**
 
-1. Create a project at [railway.app](https://railway.app) and connect the Clawmate repo.
+1. Create a project at [railway.app](https://railway.app) and connect the ClawMate repo.
 2. Add a **service** and set **Root Directory** to `backend`.
 3. In **Variables**, set:
    - `FRONTEND_URL` = your frontend URL (e.g. `https://clawmate.vercel.app`). Must match exactly for CORS.

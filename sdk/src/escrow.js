@@ -1,6 +1,6 @@
 /**
  * Optional escrow helpers for on-chain create/join/cancel.
- * Use when your Clawmate backend uses the ChessBetEscrow contract; pass your own provider, signer, and contract address.
+ * Use when your ClawMate backend uses the ChessBetEscrow contract; pass your own provider, signer, and contract address.
  */
 
 import { Contract } from "ethers";

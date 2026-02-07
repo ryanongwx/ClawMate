@@ -1,6 +1,6 @@
 import { BrowserProvider } from "ethers";
 
-const DOMAIN = "Clawmate";
+const DOMAIN = "ClawMate";
 
 /**
  * Sign a message with the connected wallet. Uses personal_sign (EIP-191).

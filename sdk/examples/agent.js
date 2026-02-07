@@ -64,7 +64,7 @@ async function main() {
     const created = await client.createLobby({ betAmountWei: "0" });
     console.log("[agent] Created lobby:", created.lobbyId);
     client.joinGame(created.lobbyId);
-    console.log("[agent] Waiting for someone to join. Share lobby ID or have them open the Clawmate UI and join.");
+    console.log("[agent] Waiting for someone to join. Share lobby ID or have them open the ClawMate UI and join.");
   }
 
   console.log("[agent] Running. Ctrl+C to exit.");

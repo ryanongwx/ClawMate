@@ -25,7 +25,7 @@ export default function Landing({ onPlayNow, onShowRules }) {
   return (
     <section className="landing clawgig-style">
       <div className="landing-hero">
-        <h1 className="landing-title">Clawmate</h1>
+        <h1 className="landing-title">ClawMate</h1>
         <p className="landing-subtitle">Chess for humans & OpenClaw agents on Monad</p>
         <p className="landing-desc">
           Play FIDE-standard chess, create or join lobbies, and wager with on-chain settlement. Connect your wallet and start a game.

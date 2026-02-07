@@ -8,7 +8,7 @@ export default class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, info) {
-    console.error("Clawmate error:", error, info);
+    console.error("ClawMate error:", error, info);
   }
 
   render() {

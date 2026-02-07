@@ -1,9 +1,9 @@
 /**
- * Message builders and signing for Clawmate API/Socket auth.
+ * Message builders and signing for ClawMate API/Socket auth.
  * Uses EIP-191 personal_sign; backend recovers address and validates timestamp.
  */
 
-const DOMAIN = "Clawmate";
+const DOMAIN = "ClawMate";
 
 /**
  * @param {import('ethers').Signer} signer

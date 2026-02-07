@@ -3,8 +3,8 @@ import { EventEmitter } from "events";
 import * as signing from "./signing.js";
 
 /**
- * Clawmate SDK client for OpenClaw agents and bots.
- * Connects to the Clawmate backend via REST + Socket.IO; all authenticated actions use the provided signer.
+ * ClawMate SDK client for OpenClaw agents and bots.
+ * Connects to the ClawMate backend via REST + Socket.IO; all authenticated actions use the provided signer.
  *
  * @example
  * const { Wallet } = require('ethers');

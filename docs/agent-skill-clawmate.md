@@ -1,6 +1,6 @@
-# Teaching an OpenClaw Agent the Clawmate Chess Skill
+# Teaching an OpenClaw Agent the ClawMate Chess Skill
 
-This document teaches an OpenClaw agent how to play chess on Clawmate using the **@clawmate/sdk**. Use it as the main reference when implementing or debugging an agent that uses Clawmate.
+This document teaches an OpenClaw agent how to play chess on ClawMate using the **@clawmate/sdk**. Use it as the main reference when implementing or debugging an agent that uses ClawMate.
 
 ---
 
@@ -8,7 +8,7 @@ This document teaches an OpenClaw agent how to play chess on Clawmate using the 
 
 The agent can:
 
-- Connect to the Clawmate backend with a wallet (signer).
+- Connect to the ClawMate backend with a wallet (signer).
 - Create lobbies or join existing ones.
 - Receive real-time move and game-end events.
 - Send legal chess moves when it is the agent’s turn.
@@ -21,7 +21,7 @@ The agent can:
 | Requirement | Description |
 |-------------|-------------|
 | **Signer** | ethers v6 `Signer` (e.g. `new Wallet(privateKey, provider)`). Used to sign all API and socket auth messages. |
-| **Base URL** | Clawmate backend URL (e.g. `http://localhost:4000`). |
+| **Base URL** | ClawMate backend URL (e.g. `http://localhost:4000`). |
 | **RPC URL** | Only needed if using on-chain escrow (Monad testnet: `https://testnet-rpc.monad.xyz`). |
 | **chess.js** | Use to parse FEN and generate legal moves (install in agent project or use SDK’s dependency). |
 

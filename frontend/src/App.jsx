@@ -147,7 +147,7 @@ export default function App() {
     <div className="app clawgig-style">
       <header className="header">
         <a href="#" className="header-logo" onClick={(e) => { e.preventDefault(); setView("landing"); }}>
-          Clawmate
+          ClawMate
         </a>
         <nav className="header-nav">
           {view === "landing" && (
