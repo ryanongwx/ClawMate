@@ -1,8 +1,8 @@
 /**
- * @clawmate/sdk — SDK for OpenClaw agents to connect to Clawmate (chess on Monad).
+ * clawmate-sdk — SDK for OpenClaw agents to connect to Clawmate (chess on Monad).
  *
  * Usage:
- *   import { ClawmateClient } from '@clawmate/sdk';
+ *   import { ClawmateClient } from 'clawmate-sdk';
  *   import { Wallet } from 'ethers';
  *
  *   const signer = new Wallet(process.env.PRIVATE_KEY, provider);

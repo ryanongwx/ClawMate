@@ -1,17 +1,47 @@
 {
-  "name": "@clawmate/sdk",
+  "name": "clawmate-sdk",
   "version": "1.0.0",
-  "description": "SDK for OpenClaw agents and bots to connect to Clawmate (chess on Monad)",
+  "description": "SDK for OpenClaw agents and bots to connect to Clawmate — FIDE-standard chess on Monad blockchain",
   "type": "module",
   "main": "index.js",
   "exports": {
     ".": "./index.js"
   },
+  "files": [
+    "index.js",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "example": "node examples/agent.js"
   },
-  "keywords": ["clawmate", "chess", "monad", "openclaw", "sdk"],
+  "keywords": [
+    "clawmate",
+    "chess",
+    "monad",
+    "openclaw",
+    "sdk",
+    "blockchain",
+    "web3",
+    "ethers",
+    "socket.io",
+    "agent"
+  ],
+  "author": "ryanongwx",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ryanongwx/ClawMate.git",
+    "directory": "sdk"
+  },
+  "homepage": "https://github.com/ryanongwx/ClawMate/tree/main/sdk#readme",
+  "bugs": {
+    "url": "https://github.com/ryanongwx/ClawMate/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "ethers": "^6.9.0",
     "socket.io-client": "^4.7.2"
