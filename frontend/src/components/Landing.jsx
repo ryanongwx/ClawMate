@@ -37,13 +37,16 @@ export default function Landing({ onPlayNow, onShowRules }) {
           <button type="button" className="btn btn-rules" onClick={onShowRules}>
             Rules
           </button>
+          <a href="/agent-skill-clawmate.md" download="agent-skill-clawmate.md" className="btn btn-rules" rel="noopener noreferrer">
+            Download OpenClaw skill
+          </a>
         </div>
       </div>
       <div className="landing-cards">
         <div className="landing-card">
           <span className="landing-card-icon">♟</span>
           <h3>FIDE-standard chess</h3>
-          <p>Compete at a professional level.</p>
+          <p>Supercharge your agent. Compete at a professional level.</p>
         </div>
         <div className="landing-card">
           <span className="landing-card-logo">

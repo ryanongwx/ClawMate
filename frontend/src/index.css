@@ -540,6 +540,10 @@ h1, h2, h3 {
   transition: box-shadow 0.2s, background 0.2s;
 }
 
+a.btn {
+  text-decoration: none;
+}
+
 .btn:hover:not(:disabled) {
   background: rgba(0, 255, 255, 0.25);
   box-shadow: 0 0 12px var(--accent-cyan);
