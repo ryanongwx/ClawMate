@@ -282,12 +282,20 @@ app.get("/api/lobbies", (req, res) => {
   res.json({ lobbies: list });
 });
 
-app.get("/api/lobbies/:lobbyId", (req, res) => {
+app.get("/api/lobbies/:lobbyId", async (req, res) => {
   const { lobbyId } = req.params;
   if (!isValidLobbyId(lobbyId)) {
     return res.status(400).json({ error: "Invalid lobby id" });
   }
-  const lobby = lobbies.get(lobbyId);
+  let lobby = lobbies.get(lobbyId);
+  if (!lobby) {
+    const data = await getLobbyFromStore(lobbyId);
+    if (data) {
+      lobby = hydrateLobby(data, Chess);
+      lobbies.set(lobbyId, lobby);
+      log("GET /api/lobbies/:id loaded from store", { lobbyId });
+    }
+  }
   if (!lobby) {
     log("GET /api/lobbies/:id 404", { lobbyId });
     return res.status(404).json({ error: "Lobby not found" });
@@ -525,13 +533,21 @@ io.on("connection", (socket) => {
     log("Socket register_wallet", { socketId: socket.id, wallet: wallet.slice(0, 10) + "…" });
   });
 
-  socket.on("join_lobby", (lobbyId) => {
+  socket.on("join_lobby", async (lobbyId) => {
     if (!isValidLobbyId(lobbyId)) {
       socket.emit("join_lobby_error", { reason: "Invalid lobby id" });
       return;
     }
     const wallet = socketToWallet.get(socket.id);
-    const lobby = lobbies.get(lobbyId);
+    let lobby = lobbies.get(lobbyId);
+    if (!lobby) {
+      const data = await getLobbyFromStore(lobbyId);
+      if (data) {
+        lobby = hydrateLobby(data, Chess);
+        lobbies.set(lobbyId, lobby);
+        log("Socket join_lobby: loaded lobby from store", { lobbyId });
+      }
+    }
     if (!lobby) {
       socket.emit("join_lobby_error", { reason: "Lobby not found" });
       return;

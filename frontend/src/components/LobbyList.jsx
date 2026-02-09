@@ -81,7 +81,17 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
       onShowRules?.();
       return;
     }
-    setJoiningLobbyId(lobby.lobbyId);
+    const lobbyId = lobby?.lobbyId;
+    if (!lobbyId || typeof lobbyId !== "string") {
+      setJoinError("Invalid lobby: missing lobby id");
+      return;
+    }
+    const uuidV4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidV4.test(lobbyId)) {
+      setJoinError("Invalid lobby: lobby id format is invalid");
+      return;
+    }
+    setJoiningLobbyId(lobbyId);
     setJoinError(null);
     try {
       const betWei = lobby.betAmount ? String(lobby.betAmount) : "0";
@@ -94,14 +104,14 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
           return;
         }
       }
-      const { message, signature } = await signJoinLobby(lobby.lobbyId);
-      const res = await api(`/api/lobbies/${lobby.lobbyId}/join`, {
+      const { message, signature } = await signJoinLobby(lobbyId);
+      const res = await api(`/api/lobbies/${lobbyId}/join`, {
         method: "POST",
         body: JSON.stringify({ message, signature }),
       });
       if (res.ok) {
         const data = await res.json();
-        onJoinLobby(lobby.lobbyId, { ...lobby, fen: data.fen, status: "playing", player2Wallet: wallet });
+        onJoinLobby(lobbyId, { ...lobby, fen: data.fen, status: "playing", player2Wallet: wallet });
       } else {
         const data = await res.json().catch(() => ({}));
         setJoinError(data?.error || "Failed to join lobby");
