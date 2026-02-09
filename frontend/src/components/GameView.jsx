@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { api } from "../lib/api";
 import { signConcedeLobby, signTimeoutLobby, signRegisterWallet } from "../lib/auth";
 import ThreeChessBoard from "./ThreeChessBoard";
@@ -7,6 +7,7 @@ import CapturedPieces from "./CapturedPieces";
 
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 const INITIAL_TIME_SEC = 10 * 60; // 10 minutes
+const TIMER_STORAGE_KEY = "clawmate_timer";
 
 function formatTime(sec) {
   const m = Math.floor(sec / 60);
@@ -14,7 +15,32 @@ function formatTime(sec) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+function getStoredTimer(lobbyId) {
+  try {
+    const raw = localStorage.getItem(`${TIMER_STORAGE_KEY}_${lobbyId}`);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function getInitialTimes(lobbyId) {
+  const defaultTimes = { white: INITIAL_TIME_SEC, black: INITIAL_TIME_SEC, fromStorage: false };
+  if (!lobbyId) return defaultTimes;
+  const stored = getStoredTimer(lobbyId);
+  if (!stored || stored.whiteTime == null || stored.blackTime == null) return defaultTimes;
+  const elapsed = Math.floor((Date.now() - (stored.updatedAt || 0)) / 1000);
+  const turn = stored.turn || "w";
+  let white = Math.max(0, Math.floor(stored.whiteTime));
+  let black = Math.max(0, Math.floor(stored.blackTime));
+  if (turn === "w") white = Math.max(0, white - elapsed);
+  else black = Math.max(0, black - elapsed);
+  return { white, black, fromStorage: true };
+}
+
 export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket, onBack, onGameEnd, isTestGame }) {
+  const initialTimes = useMemo(() => getInitialTimes(lobbyId), [lobbyId]);
   const [lobby, setLobby] = useState(initialLobby || null);
   const [fen, setFen] = useState(() => {
     const f = initialLobby?.fen;
@@ -22,8 +48,8 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
   });
   const [status, setStatus] = useState(initialLobby?.status || "waiting");
   const [winner, setWinner] = useState(initialLobby?.winner ?? null);
-  const [whiteTime, setWhiteTime] = useState(INITIAL_TIME_SEC);
-  const [blackTime, setBlackTime] = useState(INITIAL_TIME_SEC);
+  const [whiteTime, setWhiteTime] = useState(initialTimes.white);
+  const [blackTime, setBlackTime] = useState(initialTimes.black);
   const [gameOverReason, setGameOverReason] = useState(null);
   const [showGameOverModal, setShowGameOverModal] = useState(false);
   const [showConcedeConfirm, setShowConcedeConfirm] = useState(false);
@@ -59,12 +85,35 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
 
   useEffect(() => {
     if (status === "playing" && !timersInitialized.current) {
-      setWhiteTime(INITIAL_TIME_SEC);
-      setBlackTime(INITIAL_TIME_SEC);
+      if (!initialTimes.fromStorage) {
+        setWhiteTime(INITIAL_TIME_SEC);
+        setBlackTime(INITIAL_TIME_SEC);
+      }
       timersInitialized.current = true;
     }
     if (status !== "playing") timersInitialized.current = false;
-  }, [status]);
+  }, [status, initialTimes.fromStorage]);
+
+  // Persist timer so it survives refresh
+  useEffect(() => {
+    if (status !== "playing" || !lobbyId || winner != null) return;
+    const turn = typeof fen === "string" ? (fen.split(" ")[1] || "w") : "w";
+    try {
+      localStorage.setItem(
+        `${TIMER_STORAGE_KEY}_${lobbyId}`,
+        JSON.stringify({ whiteTime, blackTime, updatedAt: Date.now(), turn })
+      );
+    } catch (_) {}
+  }, [status, lobbyId, whiteTime, blackTime, fen, winner]);
+
+  // Clear stored timer when game ends
+  useEffect(() => {
+    if ((status === "finished" || winner != null) && lobbyId) {
+      try {
+        localStorage.removeItem(`${TIMER_STORAGE_KEY}_${lobbyId}`);
+      } catch (_) {}
+    }
+  }, [status, winner, lobbyId]);
 
   useEffect(() => {
     const onMove = (payload) => {

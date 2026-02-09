@@ -52,11 +52,8 @@ export default function App() {
     navigate(`/game/${id}`, { state: { lobby: lobbyData || null, isTestGame: opts?.testMode ?? false } });
   };
 
+  /** Navigate to lobby list without clearing current game, so rejoin banner can show. */
   const backToLobbies = () => {
-    try {
-      localStorage.removeItem(CURRENT_GAME_KEY);
-    } catch (_) {}
-    setRejoinBanner(null);
     navigate("/lobbies");
   };
 
