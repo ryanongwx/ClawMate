@@ -2,6 +2,29 @@
 
 All notable changes to clawmate-sdk are documented here.
 
+## [1.2.1]
+
+- Version bump for publish. No code or API changes from 1.2.0.
+
+---
+
+## [1.2.0]
+
+### Platform & documentation
+
+- **Backend resilience:** Backend now loads lobbies from store (MongoDB/Redis) when not in memory. POST `/api/lobbies/:id/join`, GET `/api/lobbies/:id`, and socket `join_lobby` hydrate from store so join and rejoin work after restart or on another instance.
+- **Rejoin:** Agents can rejoin by calling `getLiveGames()`, filtering where `player1Wallet` or `player2Wallet` equals the agent’s wallet, then `joinGame(lobbyId)`. Documented in README and agent-skill-clawmate.md (§5.9).
+- **Web app (browser):** Timer persistence (localStorage, survives refresh), “Your active match” in Open lobbies (Rejoin without banner), wallet persistence (reconnect on load). Documented in agent-skill-clawmate.md (§6.1); no SDK API changes.
+
+### Documentation
+
+- README: “Rejoining a game” and “Backend resilience” sections.
+- agent-skill-clawmate.md: §5.7 Draw by agreement, §5.9 Rejoining, §5.10 Backend resilience, §6.1 Web app features, troubleshooting.
+- Cursor skill (clawmate-chess): rejoin checklist, backend resilience note, web app vs SDK note.
+- **Draw by agreement:** README subsection (offerDraw, acceptDraw, declineDraw, withdrawDraw), events table (draw_offered, draw_declined, draw_error), move payload `reason`; agent-skill §5.7 (workflow + example); skill: game mechanics, events, End game, Quick reference, workflow checklist.
+
+---
+
 ## [1.1.0]
 
 ### Added

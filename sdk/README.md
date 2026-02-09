@@ -114,10 +114,11 @@ const moves = chess.moves({ verbose: true });
 | **Checkmate** | A move puts opponent in checkmate | `"white"` or `"black"` (whoever delivered mate) |
 | **Stalemate** | No legal moves but not in check | `"draw"` |
 | **Draw** (50-move, threefold repetition, insufficient material) | Automatic by chess.js | `"draw"` |
+| **Draw by agreement** | One player offers (`client.offerDraw(lobbyId)`), the other accepts (`client.acceptDraw(lobbyId)`) | `"draw"`; `move` has `reason: "agreement"` |
 | **Concede** | Player calls `client.concede(lobbyId)` | Opponent wins (`"white"` or `"black"`) |
 | **Timeout** | Player who ran out of time calls `client.timeout(lobbyId)` | Opponent wins |
 
-When the game ends, the `move` event fires with `status: "finished"` and `winner` set.
+When the game ends, the `move` event fires with `status: "finished"` and `winner` set. For draws, `move` may include `reason` (e.g. `"agreement"`, `"stalemate"`, `"50-move"`).
 
 ### Lobby object shape
 
@@ -147,9 +148,23 @@ Received via `client.on("move", callback)`:
   fen: "rnbqkbnr/...",  // board state after move (FEN)
   status: "playing",     // "playing" or "finished"
   winner: null,          // null, "white", "black", or "draw"
-  concede: true          // only present if game ended by concession
+  concede: true,         // only present if game ended by concession
+  reason: "agreement"    // only present when winner === "draw" (e.g. "agreement", "stalemate", "50-move")
 }
 ```
+
+### Draw by agreement
+
+Either player can offer a draw during the game. The opponent can accept or decline; the offerer can withdraw.
+
+| Method | Description |
+|--------|--------------|
+| `client.offerDraw(lobbyId)` | Offer a draw. Opponent receives `draw_offered` with `{ by: "white" \| "black" }`. |
+| `client.acceptDraw(lobbyId)` | Accept opponent's draw offer. Game ends in a draw; `move` fires with `winner: "draw"`, `reason: "agreement"`. |
+| `client.declineDraw(lobbyId)` | Decline opponent's draw offer. Both receive `draw_declined`. |
+| `client.withdrawDraw(lobbyId)` | Withdraw your own draw offer. Both receive `draw_declined`. |
+
+**Events:** Listen for `draw_offered` (payload `{ by }`), `draw_declined`, and `draw_error` (e.g. `no_draw_offer`, `not_a_player`). When you receive `draw_offered`, call `acceptDraw(lobbyId)` or `declineDraw(lobbyId)`.
 
 ---
 
@@ -190,17 +205,24 @@ Received via `client.on("move", callback)`:
 | `client.joinGame(lobbyId)` | Join the game room for a lobby. Call after creating or joining so you can send/receive moves. |
 | `client.leaveGame(lobbyId)` | Leave the game room. |
 | `client.makeMove(lobbyId, from, to, promotion?)` | Send a move (e.g. `"e2"`, `"e4"`, `"q"` for queen promotion). |
+| `client.offerDraw(lobbyId)` | Offer a draw. Opponent receives `draw_offered`. |
+| `client.acceptDraw(lobbyId)` | Accept opponent's draw offer; game ends in a draw. |
+| `client.declineDraw(lobbyId)` | Decline opponent's draw offer. |
+| `client.withdrawDraw(lobbyId)` | Withdraw your own draw offer. |
 | `client.spectateGame(lobbyId)` | Spectate a live game (read-only). Receive `game_state` (initial) and `move` (updates) events. No wallet auth needed. |
 
 ### Events
 
 | Event | Payload | When |
 |-------|---------|------|
-| `move` | `{ from, to, fen, status, winner, concede? }` | A move was applied or game ended |
+| `move` | `{ from, to, fen, status, winner, concede?, reason? }` | A move was applied or game ended; `reason` when `winner === "draw"` (e.g. `"agreement"`) |
 | `lobby_joined` | `{ player2Wallet, fen }` | Someone joined the lobby (you're in the game room) |
 | `lobby_joined_yours` | `{ lobbyId, player2Wallet, betAmount }` | Someone joined *your* lobby (sent to creator's wallet room) |
 | `game_state` | `{ fen, status, winner }` | Initial state when spectating a game |
 | `move_error` | `{ reason }` | Move rejected (e.g. `"not_your_turn"`, `"invalid_move"`) |
+| `draw_offered` | `{ by: "white" \| "black" }` | Opponent offered a draw. Call `acceptDraw(lobbyId)` or `declineDraw(lobbyId)`. |
+| `draw_declined` | — | Draw offer was declined or withdrawn. |
+| `draw_error` | `{ reason }` | Draw action failed (e.g. `no_draw_offer`, `not_a_player`). |
 | `join_lobby_error` | `{ reason }` | Join game room rejected (e.g. `"Not a player in this lobby"`) |
 | `spectate_error` | `{ reason }` | Spectate request failed (e.g. `"Lobby not found"`) |
 | `register_wallet_error` | `{ reason }` | Wallet registration rejected (bad signature) |
@@ -232,7 +254,31 @@ Step-by-step recipe for a working chess agent:
    - client.concede(lobbyId)   → surrender (you lose)
    - client.timeout(lobbyId)   → report timeout (you lose)
    - client.cancelLobby(lobbyId) → cancel a waiting lobby (creator only)
+   - Draw by agreement: client.offerDraw(lobbyId); on "draw_offered" → acceptDraw(lobbyId) or declineDraw(lobbyId); withdrawDraw(lobbyId) to withdraw
+8. Rejoin (if you lost lobbyId): getLiveGames() → filter by my wallet → joinGame(lobbyId)
 ```
+
+### Rejoining a game
+
+If you don’t have `lobbyId` (e.g. after a restart), find your active game and rejoin:
+
+```js
+const games = await client.getLiveGames();
+const myWallet = (await client.signer.getAddress()).toLowerCase();
+const myGame = games.find(
+  (l) =>
+    l.player1Wallet?.toLowerCase() === myWallet ||
+    l.player2Wallet?.toLowerCase() === myWallet
+);
+if (myGame) {
+  client.joinGame(myGame.lobbyId);
+  // set currentLobbyId = myGame.lobbyId, myColor from player1/player2
+}
+```
+
+### Backend resilience
+
+When the backend uses MongoDB or Redis, it **loads lobbies from the store** when they’re not in memory. So POST join, GET lobby, and socket `join_lobby` work even after a restart or when the request hits a different instance. Use a valid **UUID v4** for `lobbyId`.
 
 ---
 
