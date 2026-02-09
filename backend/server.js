@@ -7,7 +7,7 @@ import rateLimit from "express-rate-limit";
 import { verifyMessage } from "ethers";
 import { v4 as uuidv4 } from "uuid";
 import { Chess } from "chess.js";
-import { initStore, loadLobbies, saveLobby, getLobbyFromStore, hydrateLobby } from "./store.js";
+import { initStore, loadLobbies, saveLobby, getLobbyFromStore, hydrateLobby, findWaitingLobbyByCreator } from "./store.js";
 
 const ts = () => new Date().toISOString();
 const log = (msg, data = null) => {
@@ -48,6 +48,9 @@ const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[
 function isValidLobbyId(id) {
   return typeof id === "string" && id.length <= 64 && UUID_V4_REGEX.test(id);
 }
+
+// Server-side clock: seconds per side (e.g. 10 min). Game auto-ends when one side hits 0.
+const INITIAL_TIME_SEC = 10 * 60;
 
 const app = express();
 const http = createServer(app);
@@ -163,6 +166,8 @@ function joinLobby(lobbyId, player2Wallet) {
   }
   lobby.player2Wallet = player2Wallet;
   lobby.status = "playing";
+  lobby.whiteTimeSec = INITIAL_TIME_SEC;
+  lobby.blackTimeSec = INITIAL_TIME_SEC;
   saveLobby(lobby).catch(() => {});
   log("Lobby joined", { lobbyId, player2Wallet: player2Wallet?.slice(0, 10) + "…" });
   return true;
@@ -204,6 +209,8 @@ function applyMove(lobbyId, from, to, promotion = "q") {
       winner: lobby.winner,
       status: lobby.status,
       drawReason: lobby.winner === "draw" ? lobby.drawReason : undefined,
+      whiteTimeSec: lobby.whiteTimeSec,
+      blackTimeSec: lobby.blackTimeSec,
     };
   } catch (e) {
     return { ok: false, reason: "invalid_move" };
@@ -234,7 +241,7 @@ app.get("/api/status", (req, res) => {
   res.json(payload);
 });
 
-app.post("/api/lobbies", (req, res) => {
+app.post("/api/lobbies", async (req, res) => {
   const { message, signature, betAmount, contractGameId } = req.body || {};
   if (!message || !signature) {
     return res.status(400).json({ error: "message and signature required" });
@@ -247,10 +254,15 @@ app.post("/api/lobbies", (req, res) => {
     return res.status(400).json({ error: "Invalid signature" });
   }
   log("POST /api/lobbies", { player1Wallet: player1Wallet.slice(0, 10) + "…", betAmount, contractGameId });
-  const existing = Array.from(lobbies.values()).find((l) => l.status === "waiting" && l.player1Wallet?.toLowerCase() === player1Wallet);
-  if (existing) {
-    log("POST /api/lobbies 400 already have lobby", { existingLobbyId: existing.lobbyId });
-    return res.status(400).json({ error: "You already have an open lobby. Cancel it or wait for someone to join.", existingLobbyId: existing.lobbyId });
+  const existingInMemory = Array.from(lobbies.values()).find((l) => l.status === "waiting" && l.player1Wallet?.toLowerCase() === player1Wallet);
+  if (existingInMemory) {
+    log("POST /api/lobbies 400 already have lobby", { existingLobbyId: existingInMemory.lobbyId });
+    return res.status(400).json({ error: "You already have an open lobby. Cancel it or wait for someone to join.", existingLobbyId: existingInMemory.lobbyId });
+  }
+  const existingInStore = await findWaitingLobbyByCreator(player1Wallet);
+  if (existingInStore) {
+    log("POST /api/lobbies 400 already have lobby (from store)", { existingLobbyId: existingInStore });
+    return res.status(400).json({ error: "You already have an open lobby. Cancel it or wait for someone to join.", existingLobbyId: existingInStore });
   }
   const lobbyId = createLobby(player1Wallet, betAmount, contractGameId);
   const lobby = lobbies.get(lobbyId);
@@ -276,7 +288,15 @@ app.get("/api/lobbies", (req, res) => {
       betAmount: l.betAmount,
       contractGameId: l.contractGameId,
       player1Wallet: l.player1Wallet,
-      ...(l.status === "playing" ? { player2Wallet: l.player2Wallet, fen: l.fen, status: l.status, winner: l.winner } : {}),
+      ...(l.status === "playing"
+        ? {
+            player2Wallet: l.player2Wallet,
+            fen: l.fen,
+            status: l.status,
+            winner: l.winner,
+            ...(l.whiteTimeSec != null || l.blackTimeSec != null ? { whiteTimeSec: l.whiteTimeSec ?? null, blackTimeSec: l.blackTimeSec ?? null } : {}),
+          }
+        : {}),
     }));
   log("GET /api/lobbies", { count: list.length, statusFilter: statusFilter ?? "waiting", lobbyIds: list.map((l) => l.lobbyId) });
   res.json({ lobbies: list });
@@ -312,6 +332,7 @@ app.get("/api/lobbies/:lobbyId", async (req, res) => {
     winner: lobby.winner,
     ...(lobby.winner === "draw" && lobby.drawReason ? { drawReason: lobby.drawReason } : {}),
     ...(lobby.status === "playing" && lobby.drawOfferBy ? { drawOfferBy: lobby.drawOfferBy } : {}),
+    ...(lobby.status === "playing" && (lobby.whiteTimeSec != null || lobby.blackTimeSec != null) ? { whiteTimeSec: lobby.whiteTimeSec ?? null, blackTimeSec: lobby.blackTimeSec ?? null } : {}),
   });
 });
 
@@ -406,12 +427,20 @@ app.post("/api/lobbies/:lobbyId/cancel", (req, res) => {
 });
 
 // Player concedes; other player wins. Backend updates state and optionally resolves escrow.
-app.post("/api/lobbies/:lobbyId/concede", (req, res) => {
+app.post("/api/lobbies/:lobbyId/concede", async (req, res) => {
   const { lobbyId } = req.params;
   if (!isValidLobbyId(lobbyId)) {
     return res.status(400).json({ error: "Invalid lobby id" });
   }
-  const lobby = lobbies.get(lobbyId);
+  let lobby = lobbies.get(lobbyId);
+  if (!lobby) {
+    const data = await getLobbyFromStore(lobbyId);
+    if (data) {
+      lobby = hydrateLobby(data, Chess);
+      lobbies.set(lobbyId, lobby);
+      log("Concede: loaded lobby from store", { lobbyId });
+    }
+  }
   const { message, signature } = req.body || {};
   if (!message || !signature) {
     return res.status(400).json({ error: "message and signature required" });
@@ -620,6 +649,7 @@ io.on("connection", (socket) => {
         winner: result.winner,
         status: result.status,
         ...(result.winner === "draw" && result.drawReason ? { reason: result.drawReason } : {}),
+        ...(result.whiteTimeSec != null || result.blackTimeSec != null ? { whiteTimeSec: result.whiteTimeSec, blackTimeSec: result.blackTimeSec } : {}),
       });
     } else {
       log("Socket move rejected", { lobbyId, from, to, reason: result.reason });
@@ -655,10 +685,18 @@ io.on("connection", (socket) => {
     io.to(lobbyId).emit("draw_offered", { by: color });
   });
 
-  socket.on("accept_draw", (lobbyId) => {
+  socket.on("accept_draw", async (lobbyId) => {
     if (!isValidLobbyId(lobbyId)) return;
     const wallet = socketToWallet.get(socket.id);
-    const lobby = lobbies.get(lobbyId);
+    let lobby = lobbies.get(lobbyId);
+    if (!lobby) {
+      const data = await getLobbyFromStore(lobbyId);
+      if (data) {
+        lobby = hydrateLobby(data, Chess);
+        lobbies.set(lobbyId, lobby);
+        log("accept_draw: loaded lobby from store", { lobbyId });
+      }
+    }
     if (!lobby || lobby.status !== "playing") {
       socket.emit("draw_error", { reason: "invalid_lobby" });
       return;
@@ -725,9 +763,43 @@ io.on("connection", (socket) => {
   });
 });
 
+// Server-side clock: every second, decrement the side-to-move's time; if <= 0, declare timeout.
+function tickClocks() {
+  for (const [lobbyId, lobby] of lobbies.entries()) {
+    if (lobby.status !== "playing" || !lobby.fen) continue;
+    const turn = lobby.fen.split(" ")[1] || "w";
+    const whiteSec = lobby.whiteTimeSec ?? INITIAL_TIME_SEC;
+    const blackSec = lobby.blackTimeSec ?? INITIAL_TIME_SEC;
+    if (turn === "w") {
+      lobby.whiteTimeSec = Math.max(0, whiteSec - 1);
+      if (lobby.whiteTimeSec <= 0) {
+        lobby.status = "finished";
+        lobby.winner = "black";
+        lobby.whiteTimeSec = 0;
+        saveLobby(lobby).catch(() => {});
+        log("Game finished (timeout)", { lobbyId, winner: lobby.winner });
+        io.to(lobbyId).emit("move", { fen: lobby.fen, winner: "black", status: "finished", whiteTimeSec: 0, blackTimeSec: blackSec, timeout: true });
+        resolveEscrowIfNeeded(lobby).catch(() => {});
+      }
+    } else {
+      lobby.blackTimeSec = Math.max(0, blackSec - 1);
+      if (lobby.blackTimeSec <= 0) {
+        lobby.status = "finished";
+        lobby.winner = "white";
+        lobby.blackTimeSec = 0;
+        saveLobby(lobby).catch(() => {});
+        log("Game finished (timeout)", { lobbyId, winner: lobby.winner });
+        io.to(lobbyId).emit("move", { fen: lobby.fen, winner: "white", status: "finished", whiteTimeSec: whiteSec, blackTimeSec: 0, timeout: true });
+        resolveEscrowIfNeeded(lobby).catch(() => {});
+      }
+    }
+  }
+}
+
 async function start() {
   await initStore();
   await loadLobbies(lobbies, Chess);
+  setInterval(tickClocks, 1000);
   http.listen(PORT, "0.0.0.0", () => {
     log(`Server listening on 0.0.0.0:${PORT}`);
     log("Escrow resolver", { enabled: !!escrowContract });

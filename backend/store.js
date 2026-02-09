@@ -21,6 +21,8 @@ function serializeLobby(lobby) {
     status: lobby.status || "waiting",
     winner: lobby.winner ?? null,
     drawReason: lobby.drawReason ?? null,
+    whiteTimeSec: lobby.whiteTimeSec ?? null,
+    blackTimeSec: lobby.blackTimeSec ?? null,
     createdAt: lobby.createdAt ?? Date.now(),
   };
 }
@@ -98,6 +100,48 @@ export async function getLobbyFromStore(lobbyId) {
       return JSON.parse(raw);
     } catch (e) {
       console.warn("[store] getLobbyFromStore (Redis) failed", lobbyId, e.message);
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Find a waiting lobby whose creator is the given wallet (case-insensitive).
+ * Used to enforce "one open lobby per user" when using a store (multi-instance or after restart).
+ * @param {string} wallet - Creator wallet (player1Wallet)
+ * @returns {Promise<string | null>} lobbyId if found, else null
+ */
+export async function findWaitingLobbyByCreator(wallet) {
+  if (!wallet || typeof wallet !== "string") return null;
+  const w = wallet.toLowerCase();
+  if (storeMode === "mongo" && mongoCollection) {
+    try {
+      const escaped = wallet.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const doc = await mongoCollection.findOne(
+        { status: "waiting", player1Wallet: new RegExp(`^${escaped}$`, "i") },
+        { projection: { lobbyId: 1 } }
+      );
+      return doc?.lobbyId ?? null;
+    } catch (e) {
+      console.warn("[store] findWaitingLobbyByCreator (MongoDB) failed", e.message);
+      return null;
+    }
+  }
+  if (storeMode === "redis" && redis) {
+    try {
+      const ids = await redis.smembers(REDIS_IDS_KEY);
+      for (const id of ids) {
+        const raw = await redis.get(REDIS_PREFIX + id);
+        if (!raw) continue;
+        try {
+          const data = JSON.parse(raw);
+          if (data.status === "waiting" && (data.player1Wallet || "").toLowerCase() === w) return id;
+        } catch (_) {}
+      }
+      return null;
+    } catch (e) {
+      console.warn("[store] findWaitingLobbyByCreator (Redis) failed", e.message);
       return null;
     }
   }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { api } from "../lib/api";
-import { signConcedeLobby, signTimeoutLobby, signRegisterWallet } from "../lib/auth";
+import { signConcedeLobby, signRegisterWallet } from "../lib/auth";
 import ThreeChessBoard from "./ThreeChessBoard";
 import GameOverModal from "./GameOverModal";
 import CapturedPieces from "./CapturedPieces";
@@ -10,8 +10,9 @@ const INITIAL_TIME_SEC = 10 * 60; // 10 minutes
 const TIMER_STORAGE_KEY = "clawmate_timer";
 
 function formatTime(sec) {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
+  const safe = Math.max(0, Math.floor(Number(sec) || 0));
+  const m = Math.floor(safe / 60);
+  const s = safe % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
@@ -48,8 +49,12 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
   });
   const [status, setStatus] = useState(initialLobby?.status || "waiting");
   const [winner, setWinner] = useState(initialLobby?.winner ?? null);
-  const [whiteTime, setWhiteTime] = useState(initialTimes.white);
-  const [blackTime, setBlackTime] = useState(initialTimes.black);
+  const [whiteTime, setWhiteTime] = useState(() =>
+    initialLobby?.whiteTimeSec != null ? initialLobby.whiteTimeSec : initialTimes.white
+  );
+  const [blackTime, setBlackTime] = useState(() =>
+    initialLobby?.blackTimeSec != null ? initialLobby.blackTimeSec : initialTimes.black
+  );
   const [gameOverReason, setGameOverReason] = useState(null);
   const [showGameOverModal, setShowGameOverModal] = useState(false);
   const [showConcedeConfirm, setShowConcedeConfirm] = useState(false);
@@ -85,14 +90,15 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
 
   useEffect(() => {
     if (status === "playing" && !timersInitialized.current) {
-      if (!initialTimes.fromStorage) {
+      const hasServerClock = initialLobby?.whiteTimeSec != null || initialLobby?.blackTimeSec != null;
+      if (!initialTimes.fromStorage && !hasServerClock) {
         setWhiteTime(INITIAL_TIME_SEC);
         setBlackTime(INITIAL_TIME_SEC);
       }
       timersInitialized.current = true;
     }
     if (status !== "playing") timersInitialized.current = false;
-  }, [status, initialTimes.fromStorage]);
+  }, [status, initialTimes.fromStorage, initialLobby?.whiteTimeSec, initialLobby?.blackTimeSec]);
 
   // Persist timer so it survives refresh
   useEffect(() => {
@@ -119,6 +125,8 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
     const onMove = (payload) => {
       setFen(payload.fen);
       if (payload.status) setStatus(payload.status);
+      if (payload.whiteTimeSec != null) setWhiteTime(payload.whiteTimeSec);
+      if (payload.blackTimeSec != null) setBlackTime(payload.blackTimeSec);
       if (payload.status === "finished") {
         setDrawOfferBy(null);
         setDrawActionLoading(false);
@@ -130,6 +138,8 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
           const isWhite = l?.player1Wallet === wallet;
           const weWon = (payload.winner === "white" && isWhite) || (payload.winner === "black" && !isWhite);
           setGameOverReason(weWon ? "opponent_concede" : "concede");
+        } else if (payload.timeout) {
+          setGameOverReason("timeout");
         } else {
           setGameOverReason(payload.winner === "draw" ? (payload.reason || "draw") : "checkmate");
         }
@@ -175,12 +185,16 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
             setShowGameOverModal(true);
           }
           if (data.status === "playing" && data.drawOfferBy != null) setDrawOfferBy(data.drawOfferBy);
+          if (data.status === "playing" && (data.whiteTimeSec != null || data.blackTimeSec != null)) {
+            if (data.whiteTimeSec != null) setWhiteTime(data.whiteTimeSec);
+            if (data.blackTimeSec != null) setBlackTime(data.blackTimeSec);
+          }
         })
         .catch(() => {});
     }
   }, [lobbyId, lobby]);
 
-  // Timer: every second, decrement current side's time. On 0, that side loses.
+  // Local timer for display only; server is source of truth and auto-declares timeout.
   useEffect(() => {
     if (status !== "playing" || winner != null) return;
     const turn = typeof fen === "string" ? (fen.split(" ")[1] || "w") : "w";
@@ -192,14 +206,6 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
             setStatus("finished");
             setGameOverReason("timeout");
             setShowGameOverModal(true);
-            signTimeoutLobby(lobbyId)
-              .then(({ message, signature }) =>
-                api(`/api/lobbies/${lobbyId}/timeout`, {
-                  method: "POST",
-                  body: JSON.stringify({ message, signature }),
-                })
-              )
-              .catch(() => {});
             return 0;
           }
           return t - 1;
@@ -211,14 +217,6 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
             setStatus("finished");
             setGameOverReason("timeout");
             setShowGameOverModal(true);
-            signTimeoutLobby(lobbyId)
-              .then(({ message, signature }) =>
-                api(`/api/lobbies/${lobbyId}/timeout`, {
-                  method: "POST",
-                  body: JSON.stringify({ message, signature }),
-                })
-              )
-              .catch(() => {});
             return 0;
           }
           return t - 1;
@@ -226,7 +224,7 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [status, winner, fen, lobbyId]);
+  }, [status, winner, fen]);
 
   const handleMove = (from, to, promotion) => {
     socket.emit("move", { lobbyId, from, to, promotion: promotion || "q" });
