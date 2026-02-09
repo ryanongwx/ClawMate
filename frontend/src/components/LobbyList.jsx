@@ -13,11 +13,27 @@ function betWeiToMon(weiStr) {
   }
 }
 
+/** Get fullmove number from FEN (6th field). 1-based; 1 = after white's first move. */
+function getTurnCount(fen) {
+  if (!fen || typeof fen !== "string") return 0;
+  const parts = fen.trim().split(/\s+/);
+  if (parts.length < 6) return 0;
+  const n = parseInt(parts[5], 10);
+  return Number.isNaN(n) ? 0 : n;
+}
+
 const TAB_OPEN = "open";
 const TAB_LIVE = "live";
 
-export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLobby, onCreateClick, onSpectate }) {
-  const [activeTab, setActiveTab] = useState(TAB_OPEN);
+export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLobby, onCreateClick, onSpectate, activeTab: activeTabProp, onTabChange }) {
+  const [internalTab, setInternalTab] = useState(TAB_OPEN);
+  const activeTab = activeTabProp != null ? activeTabProp : internalTab;
+  const setActiveTab = (t) => {
+    if (onTabChange) onTabChange(t);
+    else setInternalTab(t);
+  };
+
+  const [liveSearchWallet, setLiveSearchWallet] = useState("");
   const [lobbies, setLobbies] = useState([]);
   const [liveGames, setLiveGames] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -340,42 +356,72 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
       {activeTab === TAB_LIVE && (
         <div className="lobby-live-section">
           <p className="lobby-live-subtitle">Spectate games in progress</p>
+          <div className="lobby-live-search">
+            <label htmlFor="live-search-wallet" className="lobby-live-search-label">Search by wallet</label>
+            <input
+              id="live-search-wallet"
+              type="text"
+              className="lobby-live-search-input"
+              placeholder="e.g. 0x1234…abcd"
+              value={liveSearchWallet}
+              onChange={(e) => setLiveSearchWallet(e.target.value)}
+              aria-label="Filter live games by wallet address"
+            />
+          </div>
           {liveLoading ? (
             <div className="lobby-empty">
               <span className="lobby-empty-icon">⋯</span>
               <p className="lobby-empty-title">Loading live games</p>
             </div>
-          ) : liveGames.length === 0 ? (
-            <div className="lobby-empty">
-              <span className="lobby-empty-icon">♟</span>
-              <p className="lobby-empty-title">No live games</p>
-              <p className="lobby-empty-desc">Games in progress will appear here. Create or join a game to start playing.</p>
-            </div>
-          ) : (
-            <ul className="lobby-cards lobby-cards-live">
-              {liveGames.map((l) => (
-                <li key={l.lobbyId} className="lobby-card lobby-card-live">
-                  <span className="lobby-card-icon">♟</span>
-                  <div className="lobby-card-body">
-                    <span className="lobby-card-bet">Bet: {betWeiToMon(l.betAmount)} MON</span>
-                    <span className="lobby-card-creator">
-                      {l.player1Wallet ? `${l.player1Wallet.slice(0, 6)}…${l.player1Wallet.slice(-4)}` : "—"} vs {l.player2Wallet ? `${l.player2Wallet.slice(0, 6)}…${l.player2Wallet.slice(-4)}` : "—"}
-                    </span>
-                  </div>
-                  <div className="lobby-card-actions">
-                    <button
-                      type="button"
-                      className="btn btn-spectate"
-                      onClick={() => onSpectate?.(l.lobbyId)}
-                      title="Watch this game live"
-                    >
-                      Spectate
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+          ) : (() => {
+            const search = liveSearchWallet.trim().toLowerCase();
+            const filtered = search
+              ? liveGames.filter(
+                  (l) =>
+                    (l.player1Wallet || "").toLowerCase().includes(search) ||
+                    (l.player2Wallet || "").toLowerCase().includes(search)
+                )
+              : liveGames;
+            return filtered.length === 0 ? (
+              <div className="lobby-empty">
+                <span className="lobby-empty-icon">♟</span>
+                <p className="lobby-empty-title">{liveGames.length === 0 ? "No live games" : "No games match wallet"}</p>
+                <p className="lobby-empty-desc">
+                  {liveGames.length === 0
+                    ? "Games in progress will appear here. Create or join a game to start playing."
+                    : "Try a different wallet search."}
+                </p>
+              </div>
+            ) : (
+              <ul className="lobby-cards lobby-cards-live">
+                {filtered.map((l) => {
+                  const turnCount = getTurnCount(l.fen);
+                  return (
+                    <li key={l.lobbyId} className="lobby-card lobby-card-live">
+                      <span className="lobby-card-icon">♟</span>
+                      <div className="lobby-card-body">
+                        <span className="lobby-card-bet">Bet: {betWeiToMon(l.betAmount)} MON</span>
+                        <span className="lobby-card-creator">
+                          {l.player1Wallet ? `${l.player1Wallet.slice(0, 6)}…${l.player1Wallet.slice(-4)}` : "—"} vs {l.player2Wallet ? `${l.player2Wallet.slice(0, 6)}…${l.player2Wallet.slice(-4)}` : "—"}
+                        </span>
+                        <span className="lobby-card-turn">Turn {turnCount}</span>
+                      </div>
+                      <div className="lobby-card-actions">
+                        <button
+                          type="button"
+                          className="btn btn-spectate"
+                          onClick={() => onSpectate?.(l.lobbyId)}
+                          title="Watch this game live"
+                        >
+                          Spectate
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            );
+          })()}
         </div>
       )}
     </section>

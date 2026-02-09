@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { api } from "../lib/api";
 import ThreeChessBoard from "./ThreeChessBoard";
 import GameOverModal from "./GameOverModal";
+import CapturedPieces from "./CapturedPieces";
 
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -77,12 +78,12 @@ export default function SpectateView({ lobbyId, socket, onBack }) {
 
       <div className="turn-and-timers">
         <div className={`turn-tile turn-white ${whiteToMove && status === "playing" ? "active" : ""}`}>
-          <span className="turn-label">White</span>
+          <span className="turn-label">Blue</span>
           <span className="turn-addr">{shortAddr(lobby?.player1Wallet)}</span>
           {whiteToMove && status === "playing" && <span className="turn-badge">To move</span>}
         </div>
         <div className={`turn-tile turn-black ${!whiteToMove && status === "playing" ? "active" : ""}`}>
-          <span className="turn-label">Black</span>
+          <span className="turn-label">Pink</span>
           <span className="turn-addr">{shortAddr(lobby?.player2Wallet)}</span>
           {!whiteToMove && status === "playing" && <span className="turn-badge">To move</span>}
         </div>
@@ -91,22 +92,26 @@ export default function SpectateView({ lobbyId, socket, onBack }) {
       <div className="game-meta">
         <span>Lobby: {lobbyId?.slice(0, 8)}…</span>
         {status === "playing" && (
-          <span className="status playing">{whiteToMove ? "White to move" : "Black to move"}</span>
+          <span className="status playing">{whiteToMove ? "Blue to move" : "Pink to move"}</span>
         )}
         {status === "finished" && !showGameOverModal && (
           <span className="status finished">
-            Game over · {winner === "draw" ? "Draw" : winner === "white" ? "White wins" : "Black wins"}
+            Game over · {winner === "draw" ? "Draw" : winner === "white" ? "Blue wins" : "Pink wins"}
           </span>
         )}
       </div>
 
-      <ThreeChessBoard
-        gameId={`spectate-${lobbyId}`}
-        fen={fen}
-        onMove={() => {}}
-        orientation="white"
-        disabled
-      />
+      <div className="board-with-captured">
+        <CapturedPieces side="blue" fen={fen} />
+        <ThreeChessBoard
+          gameId={`spectate-${lobbyId}`}
+          fen={fen}
+          onMove={() => {}}
+          orientation="white"
+          disabled
+        />
+        <CapturedPieces side="pink" fen={fen} />
+      </div>
 
       {showGameOverModal && status === "finished" && (
         <GameOverModal

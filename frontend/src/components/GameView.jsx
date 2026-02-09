@@ -3,6 +3,7 @@ import { api } from "../lib/api";
 import { signConcedeLobby, signTimeoutLobby, signRegisterWallet } from "../lib/auth";
 import ThreeChessBoard from "./ThreeChessBoard";
 import GameOverModal from "./GameOverModal";
+import CapturedPieces from "./CapturedPieces";
 
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 const INITIAL_TIME_SEC = 10 * 60; // 10 minutes
@@ -204,12 +205,12 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
 
       <div className="turn-and-timers">
         <div className={`turn-tile turn-white ${whiteToMove && status === "playing" ? "active" : ""}`}>
-          <span className="turn-label">White</span>
+          <span className="turn-label">Blue</span>
           <span className="turn-time">{formatTime(whiteTime)}</span>
           {whiteToMove && status === "playing" && <span className="turn-badge">To move</span>}
         </div>
         <div className={`turn-tile turn-black ${!whiteToMove && status === "playing" ? "active" : ""}`}>
-          <span className="turn-label">Black</span>
+          <span className="turn-label">Pink</span>
           <span className="turn-time">{formatTime(blackTime)}</span>
           {!whiteToMove && status === "playing" && <span className="turn-badge">To move</span>}
         </div>
@@ -225,7 +226,7 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
         )}
         {status === "finished" && !showGameOverModal && (
           <span className="status finished">
-            Game over · {winner === "draw" ? "Draw" : winner === "white" ? "White wins" : "Black wins"}
+            Game over · {winner === "draw" ? "Draw" : winner === "white" ? "Blue wins" : "Pink wins"}
           </span>
         )}
         {status === "playing" && !isTestGame && wallet && (
@@ -240,15 +241,19 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
         )}
       </div>
 
-      <ThreeChessBoard
-        key={isTestGame ? "test" : "game"}
-        gameId={lobbyId}
-        fen={fen}
-        onMove={handleMove}
-        orientation={isBlack ? "black" : "white"}
-        disabled={!isTestGame && (!myTurn || status !== "playing")}
-        isTestGame={!!isTestGame}
-      />
+      <div className="board-with-captured">
+        <CapturedPieces side="blue" fen={fen} />
+        <ThreeChessBoard
+          key={isTestGame ? "test" : "game"}
+          gameId={lobbyId}
+          fen={fen}
+          onMove={handleMove}
+          orientation={isBlack ? "black" : "white"}
+          disabled={!isTestGame && (!myTurn || status !== "playing")}
+          isTestGame={!!isTestGame}
+        />
+        <CapturedPieces side="pink" fen={fen} />
+      </div>
 
       {showGameOverModal && status === "finished" && (
         <GameOverModal

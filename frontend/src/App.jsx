@@ -31,6 +31,8 @@ function saveRulesAccepted() {
   } catch (_) {}
 }
 
+const TAB_LIVE = "live";
+
 export default function App() {
   const [view, setView] = useState("landing"); // landing | lobbies | create | game | spectate
   const [lobbyId, setLobbyId] = useState(null);
@@ -41,6 +43,7 @@ export default function App() {
   const [isTestGame, setIsTestGame] = useState(false);
   const [rejoinBanner, setRejoinBanner] = useState(null); // { lobbyId, lobby }
   const [toast, setToast] = useState(null); // { lobbyId, betAmount, player2Wallet } when someone joins your lobby
+  const [lobbyTab, setLobbyTab] = useState("open"); // "open" | "live" — which tab to show in LobbyList
 
   const openGame = (id, lobbyData, opts) => {
     setLobbyId(id);
@@ -228,6 +231,8 @@ export default function App() {
                   setView("create");
                 }}
                 onSpectate={openSpectate}
+                activeTab={lobbyTab}
+                onTabChange={setLobbyTab}
               />
             </>
           )}
@@ -252,7 +257,14 @@ export default function App() {
             />
           )}
           {view === "spectate" && lobbyId && (
-            <SpectateView lobbyId={lobbyId} socket={socket} onBack={backToLobbies} />
+            <SpectateView
+              lobbyId={lobbyId}
+              socket={socket}
+              onBack={() => {
+                setLobbyTab(TAB_LIVE);
+                backToLobbies();
+              }}
+            />
           )}
         </ErrorBoundary>
       </main>

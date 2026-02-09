@@ -5,15 +5,15 @@ export default function GameOverModal({ winner, reason, onClose }) {
     winner === "draw"
       ? "Game Over · Draw"
       : winner === "white"
-        ? "White wins!"
-        : "Black wins!";
+        ? "Blue wins!"
+        : "Pink wins!";
   const subMessage =
     reason === "timeout"
       ? winner === "draw"
         ? ""
         : winner === "white"
-          ? "Black ran out of time."
-          : "White ran out of time."
+          ? "Pink ran out of time."
+          : "Blue ran out of time."
       : reason === "concede"
         ? "You conceded."
         : reason === "opponent_concede"

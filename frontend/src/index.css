@@ -184,6 +184,11 @@ h1, h2, h3 {
   padding: 0;
 }
 
+/* Lobby list (Open lobbies / Live games): use full width so 3-column grid fits */
+.main:has(.lobby-list) {
+  max-width: 1280px;
+}
+
 .rejoin-banner {
   flex-shrink: 0;
   display: flex;
@@ -671,7 +676,8 @@ h1, h2, h3 {
 /* Lobby list — Open lobbies page */
 .lobby-list.lobby-page {
   padding: 24px 0 48px;
-  max-width: 720px;
+  max-width: 100%;
+  width: 100%;
   margin: 0 auto;
 }
 
@@ -983,8 +989,62 @@ h1, h2, h3 {
   margin: 0 0 12px;
 }
 
+.lobby-live-search {
+  margin-bottom: 16px;
+}
+
+.lobby-live-search-label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.lobby-live-search-input {
+  width: 100%;
+  max-width: 320px;
+  padding: 8px 12px;
+  font-size: 0.9rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text);
+}
+
+.lobby-live-search-input::placeholder {
+  color: var(--text-dim);
+}
+
+.lobby-live-search-input:focus {
+  outline: none;
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 2px rgba(0, 255, 255, 0.15);
+}
+
 .lobby-cards-live {
   margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .lobby-cards-live {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .lobby-cards-live {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lobby-card-turn {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--accent-cyan);
+  margin-top: 4px;
 }
 
 .lobby-card-live .lobby-card-creator {
@@ -1219,11 +1279,13 @@ h1, h2, h3 {
   box-shadow: 0 0 16px var(--neon-pink-glow);
 }
 
+/* Blue side (turn-white) – blue accent when active */
 .turn-tile.turn-white.active {
-  border-color: var(--accent-pink);
-  box-shadow: 0 0 16px var(--neon-pink-glow);
+  border-color: var(--neon-blue);
+  box-shadow: 0 0 16px var(--neon-blue-glow);
 }
 
+/* Pink side (turn-black) – pink accent when active */
 .turn-tile.turn-black.active {
   border-color: var(--accent-pink);
   box-shadow: 0 0 16px var(--neon-pink-glow);
@@ -1304,6 +1366,57 @@ h1, h2, h3 {
   max-width: 100%;
   max-height: 100%;
   aspect-ratio: 1;
+}
+
+/* Board with captured pieces: left (Blue's captures), board, right (Pink's captures) */
+.board-with-captured {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 12px;
+  padding: 0 8px;
+}
+
+.board-with-captured .captured-pieces {
+  flex-shrink: 0;
+  width: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 12px 0;
+}
+
+.board-with-captured .captured-pieces-inner {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  max-height: 100%;
+}
+
+.board-with-captured .captured-piece {
+  font-size: 1.35rem;
+  line-height: 1.1;
+  opacity: 0.9;
+}
+
+.board-with-captured .captured-blue .captured-piece {
+  color: var(--accent-magenta);
+  text-shadow: 0 0 8px var(--neon-pink-glow);
+}
+
+.board-with-captured .captured-pink .captured-piece {
+  color: var(--accent-cyan);
+  text-shadow: 0 0 8px rgba(0, 212, 255, 0.5);
+}
+
+.board-with-captured .three-chess-container {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Three.js 3D chess board */

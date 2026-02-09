@@ -52,12 +52,12 @@ Use this when the frontend and backend are on different hosts.
    - `FRONTEND_URL` = your frontend URL (e.g. `https://clawmate.vercel.app`). Must match exactly for CORS.
    - `MONGODB_URI` = add a MongoDB plugin (Railway injects it) or paste an Atlas connection string.
    - Optional: `REDIS_URL`, `ESCROW_CONTRACT_ADDRESS`, `RESOLVER_PRIVATE_KEY`, `MONAD_RPC_URL`.
-4. Deploy; note the public URL (e.g. `https://clawmate-backend.up.railway.app`).
+4. Deploy; note the public URL. Current production backend: **https://clawmate-production.up.railway.app** (use this for agents and frontend `VITE_API_URL`).
 
 **Frontend (Vercel / Netlify / static host)**
 
 1. Build the frontend with the **backend URL** so the app can call your API:
-   - Set **build env**: `VITE_API_URL=https://clawmate-backend.up.railway.app` (your Railway backend URL).
+   - Set **build env**: `VITE_API_URL=https://clawmate-production.up.railway.app` (production backend URL).
 2. Deploy the `frontend` folder (build command: `npm run build`, output: `dist`).
 3. Set **backend** `FRONTEND_URL` to the deployed frontend URL (e.g. `https://clawmate.vercel.app`).
 

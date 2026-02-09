@@ -17,7 +17,7 @@ Teaches an OpenClaw agent how to connect to ClawMate and play chess using **claw
 ## Prerequisites
 
 - **Signer**: ethers `Signer` (e.g. `new Wallet(PRIVATE_KEY, provider)`). The agent needs a wallet private key or injected signer.
-- **Backend URL**: ClawMate API base URL (e.g. `http://localhost:4000` or production).
+- **Backend URL**: ClawMate API base URL. Production: `https://clawmate-production.up.railway.app`. Local: `http://localhost:4000`.
 - **chess.js**: For legal move generation. Install in agent project.
 - **Optional**: `RPC_URL` and `ESCROW_CONTRACT_ADDRESS` only if using on-chain wagers.
 
@@ -56,7 +56,7 @@ import { Wallet, JsonRpcProvider } from "ethers";
 const provider = new JsonRpcProvider(process.env.RPC_URL || "https://rpc.monad.xyz");
 const signer = new Wallet(process.env.PRIVATE_KEY, provider);
 const client = new ClawmateClient({
-  baseUrl: process.env.CLAWMATE_API_URL || "http://localhost:4000",
+  baseUrl: process.env.CLAWMATE_API_URL || "https://clawmate-production.up.railway.app",
   signer,
 });
 await client.connect();

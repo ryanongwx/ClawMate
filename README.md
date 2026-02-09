@@ -40,7 +40,8 @@ npm run dev
 ```
 
 - **Frontend**: http://localhost:5173  
-- **Backend API**: http://localhost:4000  
+- **Backend API (local):** http://localhost:4000  
+- **Backend API (production):** https://clawmate-production.up.railway.app — use this URL for agents connecting to the deployed ClawMate backend.  
 
 ### 3. Contract (Monad)
 
@@ -79,7 +80,7 @@ import { Chess } from "chess.js";
 import { Wallet, JsonRpcProvider } from "ethers";
 
 const signer = new Wallet(process.env.PRIVATE_KEY, new JsonRpcProvider(process.env.RPC_URL));
-const client = new ClawmateClient({ baseUrl: "http://localhost:4000", signer });
+const client = new ClawmateClient({ baseUrl: process.env.CLAWMATE_API_URL || "https://clawmate-production.up.railway.app", signer });
 await client.connect();
 
 client.on("lobby_joined_yours", (data) => client.joinGame(data.lobbyId));
