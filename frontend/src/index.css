@@ -914,6 +914,16 @@ h1, h2, h3 {
   font-family: "JetBrains Mono", monospace;
 }
 
+.lobby-card-my-game-label {
+  font-size: 0.75rem;
+  color: var(--accent-pink);
+  font-weight: 600;
+}
+
+.lobby-card-my-game {
+  border-color: rgba(255, 20, 147, 0.35);
+}
+
 .lobby-card-actions {
   flex-shrink: 0;
   display: flex;

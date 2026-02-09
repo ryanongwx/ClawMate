@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 // Network config — defaults to Monad Mainnet (chain ID 143 / 0x8f).
 // Override with VITE_CHAIN_ID, VITE_RPC_URL, etc. at build time for testnet or other networks.
@@ -7,9 +7,62 @@ const RPC_URL = import.meta.env.VITE_RPC_URL || "https://rpc.monad.xyz";
 const CHAIN_NAME = import.meta.env.VITE_CHAIN_NAME || "Monad";
 const BLOCK_EXPLORER_URL = import.meta.env.VITE_BLOCK_EXPLORER_URL || "https://explorer.monad.xyz";
 
+const WALLET_STORAGE_KEY = "clawmate_wallet";
+
 export default function WalletBar({ wallet, setWallet }) {
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState(null);
+
+  // Restore wallet from localStorage on load (no popup; only reconnects if wallet is still unlocked/connected)
+  useEffect(() => {
+    if (wallet) return;
+    const stored = (() => {
+      try {
+        return localStorage.getItem(WALLET_STORAGE_KEY);
+      } catch {
+        return null;
+      }
+    })();
+    if (!stored || !window.ethereum) return;
+    window.ethereum
+      .request({ method: "eth_accounts" })
+      .then((accounts) => {
+        if (!accounts?.length) return;
+        const lower = stored.toLowerCase();
+        const found = accounts.find((a) => a.toLowerCase() === lower);
+        if (found) setWallet(found);
+        else try {
+          localStorage.removeItem(WALLET_STORAGE_KEY);
+        } catch (_) {}
+      })
+      .catch(() => {
+        try {
+          localStorage.removeItem(WALLET_STORAGE_KEY);
+        } catch (_) {}
+      });
+  }, []);
+
+  // Sync when user switches account in wallet (e.g. MetaMask)
+  useEffect(() => {
+    if (!window.ethereum?.on) return;
+    const onAccountsChanged = (accounts) => {
+      if (!accounts?.length) {
+        setWallet(null);
+        try {
+          localStorage.removeItem(WALLET_STORAGE_KEY);
+        } catch (_) {}
+      } else {
+        setWallet(accounts[0]);
+        try {
+          localStorage.setItem(WALLET_STORAGE_KEY, accounts[0]);
+        } catch (_) {}
+      }
+    };
+    window.ethereum.on("accountsChanged", onAccountsChanged);
+    return () => {
+      window.ethereum.off?.("accountsChanged", onAccountsChanged);
+    };
+  }, []);
 
   const connect = async () => {
     if (!window.ethereum) {
@@ -40,7 +93,11 @@ export default function WalletBar({ wallet, setWallet }) {
           });
         }
       }
-      setWallet(accounts[0]);
+      const account = accounts[0];
+      setWallet(account);
+      try {
+        if (account) localStorage.setItem(WALLET_STORAGE_KEY, account);
+      } catch (_) {}
     } catch (e) {
       setError(e.message || "Connection failed");
     } finally {
@@ -48,7 +105,12 @@ export default function WalletBar({ wallet, setWallet }) {
     }
   };
 
-  const disconnect = () => setWallet(null);
+  const disconnect = () => {
+    setWallet(null);
+    try {
+      localStorage.removeItem(WALLET_STORAGE_KEY);
+    } catch (_) {}
+  };
 
   return (
     <div className="wallet-bar">

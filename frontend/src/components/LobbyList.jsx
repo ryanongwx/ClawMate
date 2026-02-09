@@ -75,6 +75,13 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
     return () => { cancelled = true; clearInterval(t); };
   }, []);
 
+  // Your active games (playing, you are player1 or player2) — show in Open tab so you can rejoin without relying on banner/localStorage
+  const myActiveGames = (liveGames || []).filter(
+    (l) =>
+      wallet &&
+      (l.player1Wallet?.toLowerCase() === wallet.toLowerCase() || l.player2Wallet?.toLowerCase() === wallet.toLowerCase())
+  );
+
   const join = async (lobby) => {
     if (!wallet) return;
     if (!rulesAccepted) {
@@ -294,7 +301,7 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
             <span className="lobby-empty-icon">⋯</span>
             <p className="lobby-empty-title">Loading lobbies</p>
           </div>
-        ) : lobbies.length === 0 ? (
+        ) : myActiveGames.length === 0 && lobbies.length === 0 ? (
           <div className="lobby-empty">
             <span className="lobby-empty-icon">♟</span>
             <p className="lobby-empty-title">No open lobbies</p>
@@ -310,6 +317,28 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
           </div>
         ) : (
           <ul className="lobby-cards lobby-cards-open">
+            {myActiveGames.map((l) => (
+              <li key={l.lobbyId} className="lobby-card lobby-card-my-game">
+                <span className="lobby-card-icon">♟</span>
+                <div className="lobby-card-body">
+                  <span className="lobby-card-bet">Bet: {betWeiToMon(l.betAmount)} MON</span>
+                  <span className="lobby-card-creator">
+                    {l.player1Wallet ? `${l.player1Wallet.slice(0, 6)}…${l.player1Wallet.slice(-4)}` : "—"} vs {l.player2Wallet ? `${l.player2Wallet.slice(0, 6)}…${l.player2Wallet.slice(-4)}` : "—"}
+                  </span>
+                  <span className="lobby-card-my-game-label">Your active match</span>
+                </div>
+                <div className="lobby-card-actions">
+                  <button
+                    type="button"
+                    className="btn btn-rejoin-lobby"
+                    onClick={() => onJoinLobby(l.lobbyId, { ...l, fen: l.fen, status: "playing" })}
+                    title="Rejoin this game"
+                  >
+                    Rejoin
+                  </button>
+                </div>
+              </li>
+            ))}
             {lobbies.map((l) => {
               const isCreator = wallet && l.player1Wallet?.toLowerCase() === wallet.toLowerCase();
               const canCancel = isCreator;
