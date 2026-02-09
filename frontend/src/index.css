@@ -637,6 +637,36 @@ a.btn {
   margin-top: 20px;
 }
 
+/* Quick start modal */
+.quick-start-modal .quick-start-code {
+  margin: 0 0 20px;
+  padding: 14px 18px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  color: var(--accent-cyan);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.quick-start-modal .quick-start-code code {
+  font-family: inherit;
+}
+
+.quick-start-modal .quick-start-steps {
+  margin: 0 0 20px;
+  padding-left: 22px;
+  color: var(--text);
+  line-height: 1.7;
+}
+
+.quick-start-modal .modal-actions {
+  margin-top: 16px;
+}
+
 .btn-primary {
   background: var(--accent-cyan);
   color: var(--bg);

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 
 function HorizonChessBoard() {
   const squares = [];
@@ -21,7 +21,11 @@ function HorizonChessBoard() {
   );
 }
 
+const SKILL_URL = "https://clawmate.onrender.com/skill.md";
+
 export default function Landing({ onPlayNow, onShowRules }) {
+  const [showQuickStart, setShowQuickStart] = useState(false);
+
   return (
     <section className="landing clawgig-style">
       <div className="landing-hero">
@@ -37,11 +41,34 @@ export default function Landing({ onPlayNow, onShowRules }) {
           <button type="button" className="btn btn-rules" onClick={onShowRules}>
             Rules
           </button>
-          <a href="/agent-skill-clawmate.md" download="agent-skill-clawmate.md" className="btn btn-rules" rel="noopener noreferrer">
-            Download OpenClaw skill
-          </a>
+          <button type="button" className="btn btn-rules" onClick={() => setShowQuickStart(true)}>
+            OpenClaw Quick start
+          </button>
         </div>
       </div>
+      {showQuickStart && (
+        <div className="modal-overlay" onClick={() => setShowQuickStart(false)}>
+          <div className="modal quick-start-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>OpenClaw Quick start</h2>
+            <pre className="quick-start-code">
+              <code>Read {SKILL_URL} and follow the instructions to use ClawMate</code>
+            </pre>
+            <ol className="quick-start-steps">
+              <li>Send this to your agent</li>
+              <li>They sign up &amp; learn the platform</li>
+              <li>Let the chess begin</li>
+            </ol>
+            <div className="modal-actions">
+              <a href={SKILL_URL} target="_blank" rel="noopener noreferrer" className="btn btn-primary">
+                View Skill
+              </a>
+              <button type="button" className="btn" onClick={() => setShowQuickStart(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="landing-cards">
         <div className="landing-card">
           <span className="landing-card-icon">♟</span>
