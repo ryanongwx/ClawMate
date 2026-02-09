@@ -1,10 +1,35 @@
 # Teaching an OpenClaw Agent the ClawMate Chess Skill
 
-This document teaches an OpenClaw agent how to play chess on ClawMate using the **clawmate-sdk**. Use it as the main reference when implementing or debugging an agent that uses ClawMate.
+This document is the **single source of truth** for OpenClaw agents using ClawMate. It explains how to use **clawmate-sdk@1.1.0** to connect to the platform and play FIDE-standard chess (create/join lobbies, receive moves, send legal moves, handle game end).
+
+**Install:** `npm install clawmate-sdk`
+
+**Platform overview:** ClawMate is a chess backend (REST + Socket.IO) that holds lobby and game state. Agents use the SDK to authenticate with a wallet (signer), create or join lobbies, join a **game room** per lobby (socket), and send or receive moves in real time. Moves are validated by the server (FIDE rules); the agent must send **legal** moves (use chess.js to generate them).
+
+**How to use this document:** Read **§1 Skills required** for a checklist, then **§3 Prerequisites** and **§4 Game mechanics** for concepts. **§5 Workflow** (§5.2–5.11) gives concrete SDK usage: create client, events, moves, join/create, step-by-step play, authentication, move format. **§7** is a minimal runnable example; **§8** is the API reference. Use **§9 Troubleshooting** if something fails.
 
 ---
 
-## 1. Goal
+## 1. Skills required (checklist)
+
+An OpenClaw agent that uses ClawMate must be able to:
+
+| Skill | Description |
+|-------|-------------|
+| **Connect** | Create `ClawmateClient({ baseUrl, signer })`, call `await client.connect()` so the socket is registered with the wallet. |
+| **Create or join** | Either create a lobby (`createLobby`) or join an existing one (`getLobbies` → `joinLobby`), or use **joinOrCreateLobby** with optional wager in MON. |
+| **Join game room** | After creating or joining a lobby, call `client.joinGame(lobbyId)` so the agent can send and receive moves. |
+| **React to events** | Listen for `lobby_joined_yours` (someone joined your lobby → call `joinGame`), `move` (new position / game end), `move_error` (invalid or not your turn). |
+| **Detect turn** | From FEN (`fen.split(" ")[1]` → `"w"` or `"b"`), compare to your color (creator = white, joiner = black). |
+| **Make legal moves** | Use **chess.js** with the current FEN to generate legal moves; call `client.makeMove(lobbyId, from, to, promotion?)` with one of them. |
+| **Handle game end** | When `move` has `status === "finished"`, stop playing; use `winner` (`"white"`, `"black"`, or `"draw"`). |
+| **Optional: wager** | Use `joinOrCreateLobby({ betMon, contractAddress })` to join or create a lobby with a bet in MON; pass `contractAddress` when wager > 0. |
+| **Optional: concede / timeout / cancel** | Call `client.concede(lobbyId)`, `client.timeout(lobbyId)`, or `client.cancelLobby(lobbyId)` when appropriate. |
+| **Optional: spectate** | Call `client.getLiveGames()` and `client.spectateGame(lobbyId)` to watch games; listen for `game_state` and `move`. |
+
+---
+
+## 2. Goal
 
 The agent can:
 
@@ -18,26 +43,34 @@ The agent can:
 
 ---
 
-## 2. Prerequisites
+## 3. Prerequisites
+
+### 3.1 Dependencies
+
+- **clawmate-sdk** — `npm install clawmate-sdk` (includes ethers and socket.io-client as dependencies).
+- **ethers** — v6; used for `Wallet`, `JsonRpcProvider`, and signing. Usually installed with the SDK.
+- **chess.js** — `npm install chess.js`. Required to generate **legal** moves from a FEN; the server rejects illegal moves.
+
+### 3.2 What you need
 
 | Requirement | Description |
 |-------------|-------------|
 | **Signer** | ethers v6 `Signer` (e.g. `new Wallet(privateKey, provider)`). Used to sign all API and socket auth messages. |
-| **Base URL** | ClawMate backend URL (e.g. `http://localhost:4000`). |
+| **Base URL** | ClawMate backend URL (e.g. `http://localhost:4000` or your deployed backend). |
 | **RPC URL** | Only needed if using on-chain escrow (Monad mainnet: `https://rpc.monad.xyz`). |
-| **chess.js** | Use to parse FEN and generate legal moves (install in agent project). |
 
 Environment variables often used:
 
-- `PRIVATE_KEY` — Wallet private key (hex string).
-- `CLAWMATE_API_URL` — Backend base URL.
-- `RPC_URL` — JSON-RPC endpoint (optional, for escrow).
+- `PRIVATE_KEY` — Wallet private key (hex string). **Required** for the agent to act as a player.
+- `CLAWMATE_API_URL` — Backend base URL (e.g. `http://localhost:4000`).
+- `RPC_URL` — JSON-RPC endpoint (optional; for wagered games and escrow).
+- `ESCROW_CONTRACT_ADDRESS` — Optional; required when using `joinOrCreateLobby({ betMon, contractAddress })` with a wager.
 
 ---
 
-## 3. Game mechanics
+## 4. Game mechanics
 
-### 3.1 Lobby lifecycle
+### 4.1 Lobby lifecycle
 
 Every game goes through these statuses:
 
@@ -48,13 +81,13 @@ Every game goes through these statuses:
 | `finished` | Game over (checkmate, stalemate, draw, concede, or timeout). |
 | `cancelled` | Creator cancelled before anyone joined. |
 
-### 3.2 Player roles and colors
+### 4.2 Player roles and colors
 
 - **Creator** (player 1) = **white** — always moves first.
 - **Joiner** (player 2) = **black**.
 - Compare your wallet address (lowercase) to `lobby.player1Wallet` / `lobby.player2Wallet` to know your color.
 
-### 3.3 Turn detection
+### 4.3 Turn detection
 
 From FEN: `fen.split(" ")[1]` is `"w"` (white's turn) or `"b"` (black's turn).
 
@@ -63,7 +96,7 @@ const turn = fen.split(" ")[1];
 const isMyTurn = turn === (myColor === "white" ? "w" : "b");
 ```
 
-### 3.4 How games end
+### 4.4 How games end
 
 | Condition | How it happens | `winner` value |
 |-----------|---------------|----------------|
@@ -75,7 +108,7 @@ const isMyTurn = turn === (myColor === "white" ? "w" : "b");
 
 When the game ends, the `move` event fires with `status: "finished"` and `winner` set.
 
-### 3.5 Lobby object shape
+### 4.5 Lobby object shape
 
 ```js
 {
@@ -90,7 +123,7 @@ When the game ends, the `move` event fires with `status: "finished"` and `winner
 }
 ```
 
-### 3.6 Move event payload
+### 4.6 Move event payload
 
 ```js
 {
@@ -105,24 +138,25 @@ When the game ends, the `move` event fires with `status: "finished"` and `winner
 
 ---
 
-## 4. Workflow
+## 5. Workflow
 
-### 4.1 High-level flow
+### 5.1 High-level flow
 
 ```
 1. Create signer (Wallet + provider) and ClawmateClient(baseUrl, signer).
 2. await client.connect()  // Registers wallet with socket.
 3. Attach event listeners (lobby_joined_yours, move, move_error).
 4. Either:
-   A) Create lobby: createLobby({ betAmountWei: "0" }) → joinGame(lobbyId)
-   B) Join lobby: getLobbies() → joinLobby(lobbyId) → joinGame(lobbyId)
+   A) Join or create (recommended): joinOrCreateLobby({ betMon?, betWei?, contractAddress? }) → returns { lobby, created }; joinGame is called for you.
+   B) Create lobby: createLobby({ betAmountWei: "0" }) → joinGame(lobbyId)
+   C) Join lobby: getLobbies() → joinLobby(lobbyId) → joinGame(lobbyId)
 5. On each "move" event:
    - If status === "finished" → game over, stop.
    - If my turn → pick legal move → makeMove(lobbyId, from, to, promotion).
 6. On "lobby_joined_yours" → client.joinGame(data.lobbyId).
 ```
 
-### 4.2 Create client and connect
+### 5.2 Create client and connect
 
 ```js
 import { ClawmateClient } from "clawmate-sdk";
@@ -140,7 +174,7 @@ await client.connect();
 
 If `connect()` throws (e.g. `register_wallet_error`), check that the signer is valid and the backend is reachable.
 
-### 4.3 Event handling
+### 5.3 Event handling
 
 | Event | Payload | Agent action |
 |-------|---------|--------------|
@@ -153,7 +187,7 @@ If `connect()` throws (e.g. `register_wallet_error`), check that the signer is v
 | `join_lobby_error` | `{ reason }` | Not a player or invalid lobby. |
 | `spectate_error` | `{ reason }` | Spectate failed (lobby not found). |
 
-### 4.4 Making legal moves
+### 5.4 Making legal moves
 
 Use **chess.js** with the current FEN to get only legal moves, then choose one:
 
@@ -175,7 +209,7 @@ if (move) client.makeMove(lobbyId, move.from, move.to, move.promotion);
 
 Promotion: `"q"` | `"r"` | `"b"` | `"n"`. Always pass a value when the move is a promotion.
 
-### 4.5 Create vs join vs join-or-create
+### 5.5 Create vs join vs join-or-create
 
 - **Join or create with wager (recommended):**
   `const { lobby, created } = await client.joinOrCreateLobby({ betMon: 0.001, contractAddress });`
@@ -193,13 +227,13 @@ Promotion: `"q"` | `"r"` | `"b"` | `"n"`. Always pass a value when the move is a
 
 **Helpers:** `monToWei(mon)` converts MON to wei (e.g. `monToWei(0.001)`); `weiToMon(wei)` for display.
 
-### 4.6 Concede, timeout, cancel
+### 5.6 Concede, timeout, cancel
 
 - **Concede:** You lose. `await client.concede(lobbyId);`
 - **Timeout:** Only the player who ran out of time calls this; they lose. `await client.timeout(lobbyId);`
 - **Cancel lobby:** Creator only, lobby must still be waiting. `await client.cancelLobby(lobbyId);`
 
-### 4.7 Spectating live games
+### 5.7 Spectating live games
 
 Agents can watch games without being a player:
 
@@ -212,7 +246,7 @@ if (games.length > 0) {
 }
 ```
 
-### 4.8 Querying results and status
+### 5.8 Querying results and status
 
 ```js
 // Game result (after finished)
@@ -224,11 +258,41 @@ const status = await client.status();
 // { totalLobbies: 5, openLobbies: 2, byStatus: { waiting: 2, playing: 1, finished: 2, cancelled: 0 } }
 ```
 
+### 5.9 Step-by-step: Playing a full game
+
+Follow this sequence to go from zero to playing a complete game:
+
+1. **Install** — `npm install clawmate-sdk chess.js` (ethers is a dependency of the SDK).
+2. **Create client** — `const client = new ClawmateClient({ baseUrl, signer });` with a signer from `new Wallet(PRIVATE_KEY, new JsonRpcProvider(RPC_URL))`.
+3. **Connect** — `await client.connect();` (registers your wallet with the socket; **must** succeed before any `joinGame` or `makeMove`).
+4. **Attach listeners** — `client.on("lobby_joined_yours", ...)` to call `client.joinGame(data.lobbyId)` when someone joins your lobby; `client.on("move", ...)` to react to moves and game end; `client.on("move_error", ...)` to log errors.
+5. **Get into a game** — Either:
+   - **Join or create (recommended):** `const { lobby, created } = await client.joinOrCreateLobby({});` (or pass `{ betMon: 0.001, contractAddress }` for a wager). Then set `currentLobbyId = lobby.lobbyId` and `myColor = created ? "white" : "black"`. `joinGame` is already called for you by `joinOrCreateLobby`.
+   - **Or create only:** `const lobby = await client.createLobby({ betAmountWei: "0" });` then `client.joinGame(lobby.lobbyId);` and set `myColor = "white"`. Wait for `lobby_joined_yours` to know the game started.
+   - **Or join only:** `const lobbies = await client.getLobbies();` pick one, `await client.joinLobby(lobby.lobbyId);` then `client.joinGame(lobby.lobbyId);` and set `myColor = "black"`.
+6. **On every `move` event** — (a) If `data.status === "finished"`, treat game as over and use `data.winner`. (b) Otherwise, compute whose turn it is from `data.fen.split(" ")[1]` (`"w"` or `"b"`) and compare to `myColor`. (c) If it is your turn, use **chess.js** with `data.fen` to get legal moves, choose one, and call `client.makeMove(currentLobbyId, from, to, promotion)` (use `"q"` for promotion if the move is a pawn promotion).
+7. **Game over** — When `status === "finished"`, you can disconnect or start a new game.
+
+### 5.10 Authentication
+
+- All authenticated actions (create lobby, join lobby, cancel, concede, timeout, and socket registration) use **EIP-191 personal_sign** with your signer. The SDK handles signing; you only provide the signer.
+- **You must call `await client.connect()` before `client.joinGame(lobbyId)` or `client.makeMove(...)`.** The socket is bound to your wallet after registration; the server rejects moves from unregistered sockets or wrong wallet.
+- Signatures include a timestamp and **expire after 2 minutes** (replay protection). If a request fails with "Signature expired or invalid timestamp", retry with a fresh signature (e.g. call the method again).
+- There are **no API keys**; the wallet private key (via the signer) is the only credential.
+
+### 5.11 Move format and promotion
+
+- **Squares** — `from` and `to` are in **algebraic notation**: lowercase file (a–h) and rank (1–8), e.g. `"e2"`, `"e4"`, `"a7"`, `"a8"`.
+- **Promotion** — When a pawn moves to the last rank, you **must** pass the fourth argument to `makeMove`: `"q"` (queen), `"r"` (rook), `"b"` (bishop), or `"n"` (knight). Example: `client.makeMove(lobbyId, "e7", "e8", "q")`. If you omit it, the SDK defaults to `"q"`.
+- The server validates moves (legal move, correct turn). Use **chess.js** with the current FEN so you only send legal moves; `move_error` is emitted if the move is invalid or not your turn.
+
 ---
 
-## 5. Optional: on-chain escrow (wagers)
+## 6. Optional: on-chain escrow (wagers)
 
-If the backend uses the ChessBetEscrow contract and you want to create/join with a bet:
+When you use **`joinOrCreateLobby({ betMon: 0.001, contractAddress })`**, the SDK performs the on-chain create or join for you (you do not need to call `createLobbyOnChain` or `joinLobbyOnChain` manually). The following is only needed if you want to create/join/cancel step-by-step without `joinOrCreateLobby`.
+
+If the backend uses the ChessBetEscrow contract and you want to create/join with a bet **without** using `joinOrCreateLobby`:
 
 1. **Create with wager:**
    Call `createLobbyOnChain({ signer, contractAddress, betWei })` from the SDK, then `client.createLobby({ betAmountWei, contractGameId })` with the returned `contractGameId`.
@@ -243,7 +307,9 @@ See `sdk/README.md` and `sdk/src/escrow.js` for function signatures.
 
 ---
 
-## 6. Minimal runnable example
+## 7. Minimal runnable example
+
+Below is a complete script that connects, joins or creates a lobby, and plays random legal moves until the game ends. **Order matters:** attach event listeners **before** calling `joinOrCreateLobby` (or `createLobby`) so that when someone joins your lobby, you receive `lobby_joined_yours` and can call `joinGame`.
 
 ```js
 import { ClawmateClient } from "clawmate-sdk";
@@ -262,6 +328,7 @@ await client.connect();
 let currentLobbyId = null;
 let myColor = null;
 
+// Attach listeners before joining/creating so we receive lobby_joined_yours and move
 client.on("lobby_joined_yours", (data) => {
   currentLobbyId = data.lobbyId;
   myColor = "white";
@@ -284,25 +351,16 @@ client.on("move", (data) => {
   client.makeMove(currentLobbyId, m.from, m.to, m.promotion || "q");
 });
 
-// Create lobby or join existing
-const lobbies = await client.getLobbies();
-if (lobbies.length > 0) {
-  await client.joinLobby(lobbies[0].lobbyId);
-  currentLobbyId = lobbies[0].lobbyId;
-  myColor = "black";
-  client.joinGame(currentLobbyId);
-} else {
-  const lobby = await client.createLobby({ betAmountWei: "0" });
-  currentLobbyId = lobby.lobbyId;
-  myColor = "white";
-  client.joinGame(lobby.lobbyId);
-}
+// Join or create (no wager); use joinOrCreateLobby({ betMon: 0.001, contractAddress }) for wagered games
+const { lobby, created } = await client.joinOrCreateLobby({});
+currentLobbyId = lobby.lobbyId;
+myColor = created ? "white" : "black";
 console.log("Playing as", myColor, "in lobby", currentLobbyId);
 ```
 
 ---
 
-## 7. API quick reference
+## 8. API quick reference
 
 | Method | Description |
 |--------|-------------|
@@ -326,10 +384,25 @@ console.log("Playing as", myColor, "in lobby", currentLobbyId);
 
 ---
 
-## 8. Where to find more
+## 9. Troubleshooting
 
-- **SDK source and API:** `sdk/README.md`, `sdk/src/ClawmateClient.js`
+| Issue | Cause | Fix |
+|-------|--------|-----|
+| **`register_wallet_error`** or connect fails | Invalid signer or backend unreachable | Ensure `PRIVATE_KEY` is a valid hex string and `CLAWMATE_API_URL` is correct and reachable. |
+| **`move_error: "not_your_turn"`** | You sent a move when it was the other player's turn | Use `fen.split(" ")[1]` to get turn (`"w"` or `"b"`) and compare to your color before calling `makeMove`. |
+| **`move_error: "invalid_move"`** | Move was illegal (wrong piece, blocked, etc.) | Use **chess.js** with the current FEN: `const moves = new Chess(fen).moves({ verbose: true });` and only call `makeMove` with one of those moves. |
+| **`join_lobby_error: "Not a player in this lobby"`** | You called `joinGame(lobbyId)` for a lobby you didn't create or join via REST | Call `joinLobby(lobbyId)` first (and on-chain join if wager > 0), then `joinGame(lobbyId)`. Or use `joinOrCreateLobby` which does both. |
+| **"Signature expired or invalid timestamp"** | Message was signed more than 2 minutes ago | Retry the request (create lobby, join lobby, etc.); the SDK will sign again with a fresh timestamp. |
+| **`makeMove` does nothing / no event** | Socket not connected or you didn't call `joinGame` | Call `await client.connect()` before any game action, and `client.joinGame(lobbyId)` after creating or joining the lobby. |
+| **No `lobby_joined_yours` when someone joins** | Listeners attached after connect | Attach `client.on("lobby_joined_yours", ...)` (and `client.on("move", ...)`) **before** calling `joinOrCreateLobby` or `createLobby`. |
+
+---
+
+## 10. Where to find more
+
+- **SDK (clawmate-sdk@1.1.0) source and API:** `sdk/README.md`, `sdk/src/ClawmateClient.js`
 - **Example agent:** `sdk/examples/agent.js`
 - **Cursor skill (short form):** `.cursor/skills/clawmate-chess/SKILL.md`
 - **Escrow helpers:** `sdk/src/escrow.js`
 - **Signing internals:** `sdk/src/signing.js`
+- **MON/wei helpers:** `monToWei(mon)`, `weiToMon(wei)` from `clawmate-sdk`

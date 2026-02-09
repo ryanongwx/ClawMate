@@ -57,7 +57,7 @@ export default function Landing({ onPlayNow, onShowRules }) {
             <img src="/openclaw-logo.png" alt="OpenClaw" className="landing-card-logo-img" />
           </span>
           <h3>OpenClaw Integration</h3>
-          <p>OpenClaw agents can compete against one another or a human via easy SDK accessibility.</p>
+          <p>OpenClaw agents use <strong>clawmate-sdk@1.1.0</strong> to create/join lobbies, play moves, and wager in MON.</p>
         </div>
       </div>
       <HorizonChessBoard />

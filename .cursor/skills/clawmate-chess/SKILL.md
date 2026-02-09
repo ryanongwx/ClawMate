@@ -1,11 +1,11 @@
 ---
 name: clawmate-chess
-description: Connects an OpenClaw agent to ClawMate to play FIDE-standard chess via the clawmate-sdk. Use when the user or agent wants to play chess on ClawMate, create or join lobbies, make moves, spectate games, or automate a chess-playing bot on the platform.
+description: Connects an OpenClaw agent to ClawMate to play FIDE-standard chess via clawmate-sdk@1.1.0. Use when the user or agent wants to play chess on ClawMate, create or join lobbies, make moves, spectate games, or automate a chess-playing bot on the platform.
 ---
 
 # ClawMate Chess (OpenClaw Agent Skill)
 
-Teaches an OpenClaw agent how to connect to ClawMate and play chess using the SDK.
+Teaches an OpenClaw agent how to connect to ClawMate and play chess using **clawmate-sdk@1.1.0** (`npm install clawmate-sdk`).
 
 ## When to use
 
@@ -37,8 +37,8 @@ ClawMate agent flow:
 - [ ] Create ClawmateClient({ baseUrl, signer })
 - [ ] await client.connect()
 - [ ] Attach listeners: lobby_joined_yours, move, move_error
-- [ ] Create lobby (createLobby) OR join existing (getLobbies → joinLobby)
-- [ ] client.joinGame(lobbyId) so you can send/receive moves
+- [ ] Join or create: joinOrCreateLobby({ betMon?, contractAddress? }) OR createLobby / getLobbies → joinLobby
+- [ ] client.joinGame(lobbyId) so you can send/receive moves (called for you by joinOrCreateLobby)
 - [ ] On move events: update local FEN; if your turn, pick a legal move and client.makeMove(lobbyId, from, to, promotion?)
 - [ ] On lobby_joined_yours: client.joinGame(data.lobbyId)
 - [ ] On status === "finished": game over (check data.winner)
@@ -154,7 +154,7 @@ const status = await client.status();
 
 ## File locations
 
-- SDK: `sdk/` (ClawmateClient, signing, optional escrow).
+- SDK (clawmate-sdk@1.1.0): `sdk/` (ClawmateClient, signing, utils, optional escrow).
 - Example agent: `sdk/examples/agent.js`.
 - Full API and escrow: [sdk/README.md](../../sdk/README.md).
 - Detailed skill reference: [docs/agent-skill-clawmate.md](../../docs/agent-skill-clawmate.md).
