@@ -1,7 +1,11 @@
 import React, { useState } from "react";
 
-const MONAD_CHAIN_ID = "0x279F"; // Monad Testnet chain ID 10143 (0x279F = 10143)
-const MONAD_RPC = "https://testnet-rpc.monad.xyz";
+// Network config — defaults to Monad Mainnet (chain ID 143 / 0x8f).
+// Override with VITE_CHAIN_ID, VITE_RPC_URL, etc. at build time for testnet or other networks.
+const CHAIN_ID = import.meta.env.VITE_CHAIN_ID || "0x8f"; // Monad Mainnet 143
+const RPC_URL = import.meta.env.VITE_RPC_URL || "https://rpc.monad.xyz";
+const CHAIN_NAME = import.meta.env.VITE_CHAIN_NAME || "Monad";
+const BLOCK_EXPLORER_URL = import.meta.env.VITE_BLOCK_EXPLORER_URL || "https://explorer.monad.xyz";
 
 export default function WalletBar({ wallet, setWallet }) {
   const [connecting, setConnecting] = useState(false);
@@ -17,21 +21,21 @@ export default function WalletBar({ wallet, setWallet }) {
     try {
       const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
       const chainId = await window.ethereum.request({ method: "eth_chainId" });
-      if (chainId !== MONAD_CHAIN_ID) {
+      if (chainId !== CHAIN_ID) {
         try {
           await window.ethereum.request({
             method: "wallet_switchEthereumChain",
-            params: [{ chainId: MONAD_CHAIN_ID }],
+            params: [{ chainId: CHAIN_ID }],
           });
         } catch (e) {
           await window.ethereum.request({
             method: "wallet_addEthereumChain",
             params: [{
-              chainId: MONAD_CHAIN_ID,
-              chainName: "Monad Testnet",
+              chainId: CHAIN_ID,
+              chainName: CHAIN_NAME,
               nativeCurrency: { name: "MON", symbol: "MON", decimals: 18 },
-              rpcUrls: [MONAD_RPC],
-              blockExplorerUrls: ["https://testnet.monad.xyz"],
+              rpcUrls: [RPC_URL],
+              blockExplorerUrls: [BLOCK_EXPLORER_URL],
             }],
           });
         }

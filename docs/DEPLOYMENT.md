@@ -199,3 +199,56 @@ Run backend with env and Redis; run frontend behind a reverse proxy that proxies
 - [ ] `MONGODB_URI` or `REDIS_URL` set for production so restarts keep state.
 - [ ] Rate limiting and security as in [SECURITY.md](SECURITY.md).
 - [ ] Backend and frontend health checks and restart policy (e.g. `restart: unless-stopped` in Docker).
+
+---
+
+## Moving to Monad mainnet
+
+When switching from Monad **testnet** to **mainnet**, ensure the following.
+
+### 1. Chain and RPC
+
+| | Testnet | Mainnet |
+|---|--------|--------|
+| **Chain ID** | 10143 (0x279F) | 143 (0x8f) |
+| **RPC URL** | https://testnet-rpc.monad.xyz | https://rpc.monad.xyz (or rpc1/rpc2/rpc3.monad.xyz) |
+| **Block explorer** | https://testnet.monad.xyz | https://monad.xyz (check [Monad docs](https://docs.monad.xyz)) |
+
+### 2. Frontend (wallet + escrow)
+
+Set **build-time** env so the app targets mainnet:
+
+- **`VITE_CHAIN_ID`** — mainnet: `0x8f` (143). Omit or leave default for testnet (0x279F).
+- **`VITE_RPC_URL`** — mainnet: `https://rpc.monad.xyz`. Used for wallet chain add/switch and provider.
+- **`VITE_CHAIN_NAME`** — e.g. `Monad Mainnet` (optional; used in wallet UI).
+- **`VITE_BLOCK_EXPLORER_URL`** — e.g. `https://monad.xyz` (optional).
+- **`VITE_ESCROW_CONTRACT_ADDRESS`** — your **mainnet** ChessBetEscrow address (redeploy contract on mainnet first).
+
+Rebuild and redeploy the frontend after changing these.
+
+### 3. Backend (escrow resolver)
+
+- **`MONAD_RPC_URL`** or **`RPC_URL`** — mainnet RPC (e.g. `https://rpc.monad.xyz`).
+- **`ESCROW_CONTRACT_ADDRESS`** — same mainnet ChessBetEscrow address as the frontend.
+- **`RESOLVER_PRIVATE_KEY`** — key that will call `resolveGame` on mainnet. Must hold real MON for gas; use a dedicated resolver wallet and fund it on mainnet.
+
+### 4. Contracts (deploy ChessBetEscrow on mainnet)
+
+- Add a **mainnet** network in `contracts/hardhat.config.js` (e.g. `monadMainnet` with chainId 143 and mainnet RPC).
+- Set **`MONAD_RPC_URL`** in `contracts/.env` to mainnet RPC.
+- Use a **mainnet-funded** **`PRIVATE_KEY`** for the deployer.
+- Run deploy: `npx hardhat run scripts/deploy.js --network monadMainnet`.
+- Set the new contract address in frontend and backend env as above.
+
+### 5. Users and funds
+
+- Users need **real MON** on mainnet (no faucet).
+- Wagers in escrow are real MON; ensure rules, UI, and support reflect mainnet.
+
+### 6. Checklist
+
+- [ ] ChessBetEscrow deployed on mainnet; address in frontend and backend.
+- [ ] Frontend built with mainnet `VITE_CHAIN_ID`, `VITE_RPC_URL`, `VITE_ESCROW_CONTRACT_ADDRESS`.
+- [ ] Backend `MONAD_RPC_URL` and `ESCROW_CONTRACT_ADDRESS` point to mainnet; resolver key funded.
+- [ ] Wallet bar and escrow flows tested on mainnet (small amounts first).
+- [ ] Docs and support updated for mainnet (explorer links, no testnet faucet).

@@ -99,7 +99,7 @@ let escrowContract = null;
 if (process.env.ESCROW_CONTRACT_ADDRESS && process.env.RESOLVER_PRIVATE_KEY) {
   try {
     const { Contract, JsonRpcProvider, Wallet } = await import("ethers");
-    const rpc = process.env.MONAD_RPC_URL || process.env.RPC_URL || "https://testnet-rpc.monad.xyz";
+    const rpc = process.env.MONAD_RPC_URL || process.env.RPC_URL || "https://rpc.monad.xyz";
     const provider = new JsonRpcProvider(rpc);
     const signer = new Wallet(process.env.RESOLVER_PRIVATE_KEY, provider);
     escrowContract = new Contract(process.env.ESCROW_CONTRACT_ADDRESS, ESCROW_ABI, signer);
@@ -240,15 +240,18 @@ app.post("/api/lobbies", (req, res) => {
 });
 
 app.get("/api/lobbies", (req, res) => {
+  const statusFilter = req.query.status; // "waiting" | "playing" | omit (default: waiting)
+  const filter = statusFilter === "playing" ? (l) => l.status === "playing" : (l) => l.status === "waiting";
   const list = Array.from(lobbies.values())
-    .filter((l) => l.status === "waiting")
+    .filter(filter)
     .map((l) => ({
       lobbyId: l.lobbyId,
       betAmount: l.betAmount,
       contractGameId: l.contractGameId,
       player1Wallet: l.player1Wallet,
+      ...(l.status === "playing" ? { player2Wallet: l.player2Wallet, fen: l.fen, status: l.status, winner: l.winner } : {}),
     }));
-  log("GET /api/lobbies", { count: list.length, lobbyIds: list.map((l) => l.lobbyId) });
+  log("GET /api/lobbies", { count: list.length, statusFilter: statusFilter ?? "waiting", lobbyIds: list.map((l) => l.lobbyId) });
   res.json({ lobbies: list });
 });
 
@@ -488,6 +491,21 @@ io.on("connection", (socket) => {
   socket.on("leave_lobby", (lobbyId) => {
     socket.leave(lobbyId);
     if (gameToLobby.get(socket.id) === lobbyId) gameToLobby.delete(socket.id);
+  });
+
+  socket.on("spectate_lobby", (lobbyId) => {
+    if (!isValidLobbyId(lobbyId)) {
+      socket.emit("spectate_error", { reason: "Invalid lobby id" });
+      return;
+    }
+    const lobby = lobbies.get(lobbyId);
+    if (!lobby) {
+      socket.emit("spectate_error", { reason: "Lobby not found" });
+      return;
+    }
+    socket.join(lobbyId);
+    log("Socket spectate_lobby", { socketId: socket.id, lobbyId });
+    socket.emit("game_state", { fen: lobby.fen, status: lobby.status, winner: lobby.winner });
   });
 
   socket.on("move", ({ lobbyId, from, to, promotion }) => {

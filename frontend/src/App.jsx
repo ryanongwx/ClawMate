@@ -5,6 +5,7 @@ import Landing from "./components/Landing";
 import LobbyList from "./components/LobbyList";
 import CreateLobby from "./components/CreateLobby";
 import GameView from "./components/GameView";
+import SpectateView from "./components/SpectateView";
 import RulesModal from "./components/RulesModal";
 import WalletBar from "./components/WalletBar";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -31,7 +32,7 @@ function saveRulesAccepted() {
 }
 
 export default function App() {
-  const [view, setView] = useState("landing"); // landing | lobbies | create | game
+  const [view, setView] = useState("landing"); // landing | lobbies | create | game | spectate
   const [lobbyId, setLobbyId] = useState(null);
   const [lobby, setLobby] = useState(null);
   const [wallet, setWallet] = useState(null);
@@ -58,6 +59,12 @@ export default function App() {
     setLobby(null);
     setIsTestGame(false);
     setView("lobbies");
+  };
+
+  const openSpectate = (id) => {
+    setLobbyId(id);
+    setLobby(null);
+    setView("spectate");
   };
 
   const clearCurrentGame = () => {
@@ -220,6 +227,7 @@ export default function App() {
                   }
                   setView("create");
                 }}
+                onSpectate={openSpectate}
               />
             </>
           )}
@@ -242,6 +250,9 @@ export default function App() {
               onGameEnd={onGameEnd}
               isTestGame={isTestGame}
             />
+          )}
+          {view === "spectate" && lobbyId && (
+            <SpectateView lobbyId={lobbyId} socket={socket} onBack={backToLobbies} />
           )}
         </ErrorBoundary>
       </main>

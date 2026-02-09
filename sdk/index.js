@@ -21,3 +21,4 @@
 export { ClawmateClient } from "./src/ClawmateClient.js";
 export * from "./src/signing.js";
 export * from "./src/escrow.js";
+export * from "./src/utils.js";

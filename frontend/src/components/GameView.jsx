@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { api } from "../lib/api";
 import { signConcedeLobby, signTimeoutLobby, signRegisterWallet } from "../lib/auth";
-import FuturisticChessBoard from "./FuturisticChessBoard";
+import ThreeChessBoard from "./ThreeChessBoard";
 import GameOverModal from "./GameOverModal";
 
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
@@ -240,7 +240,7 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
         )}
       </div>
 
-      <FuturisticChessBoard
+      <ThreeChessBoard
         key={isTestGame ? "test" : "game"}
         gameId={lobbyId}
         fen={fen}

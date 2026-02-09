@@ -1,6 +1,8 @@
 import { io } from "socket.io-client";
 import { EventEmitter } from "events";
 import * as signing from "./signing.js";
+import { createLobbyOnChain, joinLobbyOnChain } from "./escrow.js";
+import { monToWei } from "./utils.js";
 
 /**
  * ClawMate SDK client for OpenClaw agents and bots.
@@ -76,6 +78,8 @@ export class ClawmateClient extends EventEmitter {
     this.socket.on("move", (data) => this.emit("move", data));
     this.socket.on("lobby_joined", (data) => this.emit("lobby_joined", data));
     this.socket.on("lobby_joined_yours", (data) => this.emit("lobby_joined_yours", data));
+    this.socket.on("game_state", (data) => this.emit("game_state", data));
+    this.socket.on("spectate_error", (data) => this.emit("spectate_error", data));
 
     await new Promise((resolve, reject) => {
       const done = () => {
@@ -116,6 +120,12 @@ export class ClawmateClient extends EventEmitter {
     return data.lobbies || [];
   }
 
+  /** GET /api/lobbies?status=playing — list live (in-progress) games. */
+  async getLiveGames() {
+    const data = await this._json("/api/lobbies?status=playing");
+    return data.lobbies || [];
+  }
+
   /** GET /api/lobbies/:lobbyId — fetch one lobby. */
   async getLobby(lobbyId) {
     return this._json(`/api/lobbies/${lobbyId}`);
@@ -147,6 +157,60 @@ export class ClawmateClient extends EventEmitter {
       method: "POST",
       body: JSON.stringify({ message, signature }),
     });
+  }
+
+  /**
+   * Join an existing lobby with the given wager, or create one if none match.
+   * Specify wager in MON (e.g. 0.001) or wei; if omitted, uses 0 (no wager).
+   * For wagered games (betMon > 0 or betWei > 0), pass contractAddress so the SDK can do on-chain join/create.
+   *
+   * @param {{ betMon?: number | string, betWei?: string, contractAddress?: string }} options
+   *   - betMon: wager in MON (e.g. 0.001). Ignored if betWei is set.
+   *   - betWei: wager in wei (string). Overrides betMon.
+   *   - contractAddress: ChessBetEscrow contract address. Required when wager > 0.
+   * @returns {{ lobby: object, created: boolean }} lobby object and true if a new lobby was created
+   */
+  async joinOrCreateLobby(options = {}) {
+    const betWei =
+      options.betWei != null && options.betWei !== ""
+        ? String(options.betWei)
+        : monToWei(options.betMon ?? 0);
+    const hasWager = BigInt(betWei) > 0n;
+    if (hasWager && !options.contractAddress) {
+      throw new Error("contractAddress is required when wager > 0 (for on-chain escrow)");
+    }
+
+    const lobbies = await this.getLobbies();
+    const match = lobbies.find((l) => l.betAmount === betWei);
+
+    if (match) {
+      if (hasWager) {
+        await joinLobbyOnChain({
+          signer: this.signer,
+          contractAddress: options.contractAddress,
+          gameId: match.contractGameId,
+          betWei: match.betAmount,
+        });
+      }
+      await this.joinLobby(match.lobbyId);
+      this.joinGame(match.lobbyId);
+      const lobby = await this.getLobby(match.lobbyId);
+      return { lobby, created: false };
+    }
+
+    let lobby;
+    if (hasWager) {
+      const contractGameId = await createLobbyOnChain({
+        signer: this.signer,
+        contractAddress: options.contractAddress,
+        betWei,
+      });
+      lobby = await this.createLobby({ betAmountWei: betWei, contractGameId });
+    } else {
+      lobby = await this.createLobby({ betAmountWei: "0" });
+    }
+    this.joinGame(lobby.lobbyId);
+    return { lobby, created: true };
   }
 
   /** POST /api/lobbies/:lobbyId/cancel — cancel your waiting lobby (creator only). */
@@ -203,6 +267,31 @@ export class ClawmateClient extends EventEmitter {
   makeMove(lobbyId, from, to, promotion = "q") {
     if (!this.socket) throw new Error("Call connect() first");
     this.socket.emit("move", { lobbyId, from, to, promotion: promotion || "q" });
+  }
+
+  /**
+   * GET /api/lobbies/:lobbyId/result — get game result (winner address, status).
+   * Only useful after the game is finished.
+   * @param {string} lobbyId
+   * @returns {{ status: string, winner: string|null, winnerAddress: string|null }}
+   */
+  async getResult(lobbyId) {
+    return this._json(`/api/lobbies/${lobbyId}/result`);
+  }
+
+  /**
+   * Spectate a live game (read-only). Joins the socket room so you receive
+   * real-time "move" events. On success, a "game_state" event is emitted with
+   * the current { fen, status, winner }.
+   *
+   * Listen for "game_state" (initial snapshot) and "move" (subsequent updates).
+   * Listen for "spectate_error" on failure.
+   *
+   * @param {string} lobbyId
+   */
+  spectateGame(lobbyId) {
+    if (!this.socket) throw new Error("Call connect() first");
+    this.socket.emit("spectate_lobby", lobbyId);
   }
 
   /** GET /api/health */

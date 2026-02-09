@@ -10,8 +10,13 @@ module.exports = {
   networks: {
     hardhat: {},
     monadTestnet: {
-      url: process.env.MONAD_RPC_URL || "https://testnet-rpc.monad.xyz",
+      url: process.env.MONAD_TESTNET_RPC_URL || "https://testnet-rpc.monad.xyz",
       chainId: 10143,
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+    },
+    monadMainnet: {
+      url: process.env.MONAD_RPC_URL || "https://rpc.monad.xyz",
+      chainId: 143,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
     },
   },

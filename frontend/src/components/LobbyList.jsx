@@ -13,9 +13,15 @@ function betWeiToMon(weiStr) {
   }
 }
 
-export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLobby, onCreateClick }) {
+const TAB_OPEN = "open";
+const TAB_LIVE = "live";
+
+export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLobby, onCreateClick, onSpectate }) {
+  const [activeTab, setActiveTab] = useState(TAB_OPEN);
   const [lobbies, setLobbies] = useState([]);
+  const [liveGames, setLiveGames] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [liveLoading, setLiveLoading] = useState(true);
   const [joiningLobbyId, setJoiningLobbyId] = useState(null);
   const [joinError, setJoinError] = useState(null);
   const [cancellingLobbyId, setCancellingLobbyId] = useState(null);
@@ -35,6 +41,21 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
     };
     load();
     const t = setInterval(load, 5000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await api("/api/lobbies?status=playing");
+        const data = await res.json();
+        if (!cancelled) setLiveGames(data.lobbies || []);
+      } catch (_) {}
+      if (!cancelled) setLiveLoading(false);
+    };
+    load();
+    const t = setInterval(load, 3000);
     return () => { cancelled = true; clearInterval(t); };
   }, []);
 
@@ -91,7 +112,7 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
       .then(([state, balance]) => {
         if (cancelled) return;
         if (!state) {
-          setContractCancelReason("Could not read contract state. Check you're on Monad testnet (chain ID 10143) and the contract address in .env is correct.");
+          setContractCancelReason("Could not read contract state. Check you're on the correct Monad network and the contract address in .env is correct.");
           return;
         }
         const w = wallet.toLowerCase();
@@ -102,7 +123,7 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
         else if (balance != null && state.betAmount && BigInt(balance) < BigInt(state.betAmount)) setContractCancelReason("Contract balance is too low to refund—contract may have been redeployed. Your bet may be in an old deployment. Use 'Remove from list anyway'.");
         else setContractCancelReason("Contract state: lobby is active and you're the creator. If the tx still reverts, the contract may not have enough balance to refund (e.g. after redeploy)—use 'Remove from list anyway'.");
       })
-      .catch(() => setContractCancelReason("Could not read contract state. Check you're on Monad testnet and the contract address in .env is correct."));
+      .catch(() => setContractCancelReason("Could not read contract state. Check you're on the correct Monad network and the contract address in .env is correct."));
     return () => { cancelled = true; };
   }, [failedCancelLobby?.lobbyId, failedCancelLobby?.contractGameId, wallet]);
 
@@ -175,56 +196,73 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
 
   return (
     <section className="lobby-list lobby-page">
-      <div className="lobby-page-header">
-        <h1 className="lobby-page-title">Open lobbies</h1>
-        <p className="lobby-page-subtitle">
-          {wallet ? "Create a lobby or join an existing game." : "Connect your wallet to create or join a game."}
-        </p>
+      <div className="lobby-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === TAB_OPEN}
+          className={`lobby-tab ${activeTab === TAB_OPEN ? "active" : ""}`}
+          onClick={() => setActiveTab(TAB_OPEN)}
+        >
+          Open lobbies
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === TAB_LIVE}
+          className={`lobby-tab ${activeTab === TAB_LIVE ? "active" : ""}`}
+          onClick={() => setActiveTab(TAB_LIVE)}
+        >
+          Live games
+        </button>
       </div>
 
-      {!rulesAccepted && (
-        <div className="lobby-rules-gate" role="alert">
-          <p>You must accept the FIDE rules before creating or joining a game.</p>
-          <button type="button" className="btn btn-rules-inline" onClick={onShowRules}>
-            View &amp; accept rules
-          </button>
-        </div>
-      )}
-      <div className="lobby-actions-card">
-        <div className="lobby-actions">
-          <button
-            type="button"
-            className="btn btn-create"
-            onClick={onCreateClick}
-            disabled={!wallet || !rulesAccepted}
-          >
-            <span className="lobby-btn-icon">+</span>
-            Create lobby
-          </button>
-        </div>
-      </div>
-
-      {(joinError || cancelError) && (
-        <div className="lobby-error" role="alert">
-          <p className="lobby-error-text">{joinError || cancelError}</p>
-          {contractCancelReason && <p className="lobby-error-contract-reason">{contractCancelReason}</p>}
-          {failedCancelLobby && (
-            <div className="lobby-error-actions">
-              <p className="lobby-error-hint">
-                You can remove this lobby from the list so it no longer appears. Your bet may still be in the contract—try cancelling again, or call <code>cancelLobby({failedCancelLobby.contractGameId})</code> on the contract via a block explorer (Monad testnet).
-              </p>
-              <button
-                type="button"
-                className="btn btn-remove-from-list"
-                onClick={removeLobbyFromListOnly}
-              >
-                Remove from list anyway
+      {activeTab === TAB_OPEN && (
+        <>
+          {!rulesAccepted && (
+            <div className="lobby-rules-gate" role="alert">
+              <p>You must accept the FIDE rules before creating or joining a game.</p>
+              <button type="button" className="btn btn-rules-inline" onClick={onShowRules}>
+                View &amp; accept rules
               </button>
             </div>
           )}
-        </div>
-      )}
-      <div className="lobby-content">
+          <div className="lobby-actions-card">
+            <div className="lobby-actions">
+              <button
+                type="button"
+                className="btn btn-create"
+                onClick={onCreateClick}
+                disabled={!wallet || !rulesAccepted}
+              >
+                <span className="lobby-btn-icon">+</span>
+                Create lobby
+              </button>
+            </div>
+          </div>
+
+          {(joinError || cancelError) && (
+            <div className="lobby-error" role="alert">
+              <p className="lobby-error-text">{joinError || cancelError}</p>
+              {contractCancelReason && <p className="lobby-error-contract-reason">{contractCancelReason}</p>}
+              {failedCancelLobby && (
+                <div className="lobby-error-actions">
+                  <p className="lobby-error-hint">
+                    You can remove this lobby from the list so it no longer appears. Your bet may still be in the contract—try cancelling again, or call <code>cancelLobby({failedCancelLobby.contractGameId})</code> on the contract via a Monad block explorer.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-remove-from-list"
+                    onClick={removeLobbyFromListOnly}
+                  >
+                    Remove from list anyway
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="lobby-content">
         {loading ? (
           <div className="lobby-empty">
             <span className="lobby-empty-icon">⋯</span>
@@ -295,7 +333,51 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
             })}
           </ul>
         )}
-      </div>
+          </div>
+        </>
+      )}
+
+      {activeTab === TAB_LIVE && (
+        <div className="lobby-live-section">
+          <p className="lobby-live-subtitle">Spectate games in progress</p>
+          {liveLoading ? (
+            <div className="lobby-empty">
+              <span className="lobby-empty-icon">⋯</span>
+              <p className="lobby-empty-title">Loading live games</p>
+            </div>
+          ) : liveGames.length === 0 ? (
+            <div className="lobby-empty">
+              <span className="lobby-empty-icon">♟</span>
+              <p className="lobby-empty-title">No live games</p>
+              <p className="lobby-empty-desc">Games in progress will appear here. Create or join a game to start playing.</p>
+            </div>
+          ) : (
+            <ul className="lobby-cards lobby-cards-live">
+              {liveGames.map((l) => (
+                <li key={l.lobbyId} className="lobby-card lobby-card-live">
+                  <span className="lobby-card-icon">♟</span>
+                  <div className="lobby-card-body">
+                    <span className="lobby-card-bet">Bet: {betWeiToMon(l.betAmount)} MON</span>
+                    <span className="lobby-card-creator">
+                      {l.player1Wallet ? `${l.player1Wallet.slice(0, 6)}…${l.player1Wallet.slice(-4)}` : "—"} vs {l.player2Wallet ? `${l.player2Wallet.slice(0, 6)}…${l.player2Wallet.slice(-4)}` : "—"}
+                    </span>
+                  </div>
+                  <div className="lobby-card-actions">
+                    <button
+                      type="button"
+                      className="btn btn-spectate"
+                      onClick={() => onSpectate?.(l.lobbyId)}
+                      title="Watch this game live"
+                    >
+                      Spectate
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </section>
   );
 }

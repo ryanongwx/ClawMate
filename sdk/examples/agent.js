@@ -1,24 +1,35 @@
 #!/usr/bin/env node
 /**
- * Minimal OpenClaw agent example using @clawmate/sdk.
+ * Complete OpenClaw agent example — connects to ClawMate, creates or joins a
+ * lobby, and plays random legal moves until the game ends.
  *
  * Usage:
  *   PRIVATE_KEY=0x... CLAWMATE_API_URL=http://localhost:4000 node examples/agent.js
- *   RPC_URL is optional (defaults to Monad testnet); needed if you use escrow.
+ *   RPC_URL is optional (defaults to Monad mainnet); needed if you use escrow.
+ *   BET_MON=0.001 — optional wager in MON; join or create a lobby with that wager (requires ESCROW_CONTRACT_ADDRESS).
+ *   BET_WEI=... — optional wager in wei (overrides BET_MON).
+ *
+ * Requires chess.js:  npm install chess.js
  */
 
 import { ClawmateClient } from "../index.js";
 import { Wallet, JsonRpcProvider } from "ethers";
+import { Chess } from "chess.js";
 
+// ─── Config ───────────────────────────────────────────────────────
 const PRIVATE_KEY = process.env.PRIVATE_KEY;
 const CLAWMATE_API_URL = process.env.CLAWMATE_API_URL || "http://localhost:4000";
-const RPC_URL = process.env.RPC_URL || "https://testnet-rpc.monad.xyz";
+const RPC_URL = process.env.RPC_URL || "https://rpc.monad.xyz";
+const BET_MON = process.env.BET_MON != null ? parseFloat(process.env.BET_MON) : null;
+const BET_WEI = process.env.BET_WEI || null;
+const ESCROW_CONTRACT_ADDRESS = process.env.ESCROW_CONTRACT_ADDRESS || null;
 
 if (!PRIVATE_KEY) {
   console.error("Set PRIVATE_KEY (agent wallet private key)");
   process.exit(1);
 }
 
+// ─── Setup ────────────────────────────────────────────────────────
 const provider = new JsonRpcProvider(RPC_URL);
 const signer = new Wallet(PRIVATE_KEY, provider);
 const client = new ClawmateClient({
@@ -26,51 +37,169 @@ const client = new ClawmateClient({
   signer,
 });
 
+let currentLobbyId = null;
+let myColor = null; // "white" or "black"
+let myAddress = null;
+
+// ─── Helpers ──────────────────────────────────────────────────────
+
+/** Pick a random legal move using chess.js. Returns { from, to, promotion } or null. */
+function pickRandomMove(fen) {
+  const chess = new Chess(fen);
+  const moves = chess.moves({ verbose: true });
+  if (moves.length === 0) return null;
+  const m = moves[Math.floor(Math.random() * moves.length)];
+  return { from: m.from, to: m.to, promotion: m.promotion || "q" };
+}
+
+/** Check if it's our turn based on FEN. */
+function isMyTurn(fen) {
+  const turn = fen.split(" ")[1]; // "w" or "b"
+  return turn === (myColor === "white" ? "w" : "b");
+}
+
+// ─── Event listeners ──────────────────────────────────────────────
+
 client.on("connect", () => console.log("[agent] Socket connected"));
-client.on("disconnect", (r) => console.log("[agent] Socket disconnected", r));
-client.on("register_wallet_error", (e) => console.error("[agent] register_wallet_error", e));
-client.on("join_lobby_error", (e) => console.error("[agent] join_lobby_error", e));
-client.on("move_error", (e) => console.error("[agent] move_error", e));
+client.on("disconnect", (r) => console.log("[agent] Socket disconnected:", r));
 
-client.on("lobby_joined_yours", async (data) => {
-  console.log("[agent] Someone joined your lobby:", data.lobbyId, data.player2Wallet);
+// Error handlers
+client.on("register_wallet_error", (e) => {
+  console.error("[agent] register_wallet_error:", e.reason);
+  process.exit(1);
+});
+client.on("join_lobby_error", (e) => console.error("[agent] join_lobby_error:", e.reason));
+client.on("move_error", (e) => console.error("[agent] move_error:", e.reason));
+
+// Someone joined our lobby — we are white (creator).
+client.on("lobby_joined_yours", (data) => {
+  console.log("[agent] Opponent joined lobby:", data.lobbyId, "→", data.player2Wallet);
+  currentLobbyId = data.lobbyId;
+  myColor = "white";
   client.joinGame(data.lobbyId);
+  console.log("[agent] We are WHITE. Waiting for first move event...");
 });
 
-client.on("move", (data) => {
-  console.log("[agent] Move:", data.fen?.slice(0, 30) + "...", "winner:", data.winner ?? "-", "status:", data.status);
-});
-
+// We joined someone else's game room — receive initial FEN.
 client.on("lobby_joined", (data) => {
-  console.log("[agent] Lobby joined (you're in game):", data.fen?.slice(0, 30) + "...");
+  console.log("[agent] Game started. Initial FEN:", data.fen?.slice(0, 40) + "...");
+  // If we are black, white moves first. We wait for "move" event.
+  if (myColor === "black" && isMyTurn(data.fen)) {
+    // Edge case: if FEN says it's our turn on join, play immediately
+    const move = pickRandomMove(data.fen);
+    if (move) {
+      console.log("[agent] Playing:", move.from, "→", move.to);
+      client.makeMove(currentLobbyId, move.from, move.to, move.promotion);
+    }
+  }
 });
 
-async function main() {
-  console.log("[agent] Connecting to", CLAWMATE_API_URL);
-  await client.connect();
-  const addr = await signer.getAddress();
-  console.log("[agent] Wallet:", addr.slice(0, 10) + "..." + addr.slice(-4));
+// A move was made (by either player).
+client.on("move", (data) => {
+  const { fen, status, winner, from, to, concede } = data;
 
-  const lobbies = await client.getLobbies();
-  console.log("[agent] Open lobbies:", lobbies.length);
-
-  if (lobbies.length > 0) {
-    const lobby = lobbies[0];
-    console.log("[agent] Joining lobby", lobby.lobbyId);
-    await client.joinLobby(lobby.lobbyId);
-    client.joinGame(lobby.lobbyId);
-    console.log("[agent] Joined. Listen for 'move' events and use client.makeMove(lobbyId, from, to) when it's your turn.");
-  } else {
-    const created = await client.createLobby({ betAmountWei: "0" });
-    console.log("[agent] Created lobby:", created.lobbyId);
-    client.joinGame(created.lobbyId);
-    console.log("[agent] Waiting for someone to join. Share lobby ID or have them open the ClawMate UI and join.");
+  if (from && to) {
+    console.log(`[agent] Move: ${from} → ${to}  FEN: ${fen?.slice(0, 40)}...`);
   }
 
-  console.log("[agent] Running. Ctrl+C to exit.");
+  // Game over
+  if (status === "finished") {
+    const result = winner === "draw" ? "Draw!" : `Winner: ${winner}`;
+    const method = concede ? " (concession)" : "";
+    console.log(`[agent] Game over! ${result}${method}`);
+
+    // Check if we won
+    if (winner === myColor) {
+      console.log("[agent] We won!");
+    } else if (winner === "draw") {
+      console.log("[agent] It's a draw.");
+    } else {
+      console.log("[agent] We lost.");
+    }
+
+    client.disconnect();
+    process.exit(0);
+    return;
+  }
+
+  // Is it our turn?
+  if (!isMyTurn(fen)) {
+    console.log("[agent] Opponent's turn. Waiting...");
+    return;
+  }
+
+  // Pick and play a random legal move
+  const move = pickRandomMove(fen);
+  if (!move) {
+    console.log("[agent] No legal moves available.");
+    return;
+  }
+
+  console.log(`[agent] Our turn (${myColor}). Playing: ${move.from} → ${move.to}`);
+  client.makeMove(currentLobbyId, move.from, move.to, move.promotion);
+});
+
+// ─── Main ─────────────────────────────────────────────────────────
+
+async function main() {
+  myAddress = (await signer.getAddress()).toLowerCase();
+  console.log("[agent] Wallet:", myAddress.slice(0, 10) + "..." + myAddress.slice(-4));
+  console.log("[agent] Connecting to", CLAWMATE_API_URL);
+
+  await client.connect();
+  console.log("[agent] Connected and wallet registered.");
+
+  const hasWager = (BET_MON != null && !Number.isNaN(BET_MON) && BET_MON > 0) || (BET_WEI && BigInt(BET_WEI) > 0n);
+
+  if (hasWager && ESCROW_CONTRACT_ADDRESS) {
+    // Join or create a lobby with the specified wager (MON or wei)
+    const opts = BET_WEI
+      ? { betWei: BET_WEI, contractAddress: ESCROW_CONTRACT_ADDRESS }
+      : { betMon: BET_MON, contractAddress: ESCROW_CONTRACT_ADDRESS };
+    const { lobby, created } = await client.joinOrCreateLobby(opts);
+    currentLobbyId = lobby.lobbyId;
+    myColor = created ? "white" : "black";
+    console.log(
+      "[agent]",
+      created ? "Created" : "Joined",
+      "lobby:",
+      lobby.lobbyId,
+      "| Wager:",
+      lobby.betAmount,
+      "wei | We are",
+      myColor.toUpperCase()
+    );
+    if (created) console.log("[agent] Waiting for opponent to join...");
+  } else {
+    // No wager: join first available lobby or create one
+    const lobbies = await client.getLobbies();
+    console.log("[agent] Open lobbies:", lobbies.length);
+
+    if (lobbies.length > 0) {
+      const lobby = lobbies[0];
+      console.log("[agent] Joining lobby:", lobby.lobbyId);
+
+      await client.joinLobby(lobby.lobbyId);
+      currentLobbyId = lobby.lobbyId;
+      myColor = "black";
+      client.joinGame(lobby.lobbyId);
+
+      console.log("[agent] Joined as BLACK. White moves first.");
+    } else {
+      const created = await client.createLobby({ betAmountWei: "0" });
+      currentLobbyId = created.lobbyId;
+      myColor = "white";
+      client.joinGame(created.lobbyId);
+
+      console.log("[agent] Created lobby:", created.lobbyId);
+      console.log("[agent] We are WHITE. Waiting for opponent to join...");
+    }
+  }
+
+  console.log("[agent] Running. Press Ctrl+C to exit.");
 }
 
 main().catch((e) => {
-  console.error(e);
+  console.error("[agent] Fatal error:", e.message || e);
   process.exit(1);
 });

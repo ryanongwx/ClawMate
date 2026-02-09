@@ -675,6 +675,36 @@ h1, h2, h3 {
   margin: 0 auto;
 }
 
+.lobby-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 4px 0 0;
+}
+
+.lobby-tab {
+  padding: 12px 24px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.lobby-tab:hover {
+  color: var(--text);
+}
+
+.lobby-tab.active {
+  color: var(--accent-pink);
+  border-bottom-color: var(--accent-pink);
+}
+
 .lobby-page-header {
   margin-bottom: 28px;
   text-align: center;
@@ -921,6 +951,49 @@ h1, h2, h3 {
 .btn-join:hover:not(:disabled) {
   background: rgba(34, 211, 238, 0.25);
   box-shadow: 0 0 12px rgba(34, 211, 238, 0.3);
+}
+
+.btn-spectate {
+  flex-shrink: 0;
+  padding: 8px 18px;
+  font-size: 0.9rem;
+  background: rgba(128, 90, 255, 0.2);
+  border: 1px solid rgba(128, 90, 255, 0.6);
+  color: #b8a0ff;
+}
+
+.btn-spectate:hover {
+  background: rgba(128, 90, 255, 0.35);
+  box-shadow: 0 0 10px rgba(128, 90, 255, 0.4);
+}
+
+.lobby-live-section {
+  margin-bottom: 24px;
+}
+
+.lobby-live-title {
+  font-size: 1.15rem;
+  margin: 0 0 4px;
+  color: var(--text);
+}
+
+.lobby-live-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin: 0 0 12px;
+}
+
+.lobby-cards-live {
+  margin: 0;
+}
+
+.lobby-card-live .lobby-card-creator {
+  font-size: 0.8rem;
+}
+
+.lobby-empty-inline {
+  padding: 16px;
+  margin-bottom: 12px;
 }
 
 /* Create lobby page */
@@ -1185,6 +1258,24 @@ h1, h2, h3 {
   color: var(--accent-magenta);
 }
 
+.turn-addr {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.spectate-view .spectate-badge {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 8px;
+  background: rgba(128, 90, 255, 0.25);
+  border: 1px solid rgba(128, 90, 255, 0.5);
+  color: #b8a0ff;
+}
+
 .game-view .game-meta {
   flex-shrink: 0;
   margin-bottom: 12px;
@@ -1213,6 +1304,42 @@ h1, h2, h3 {
   max-width: 100%;
   max-height: 100%;
   aspect-ratio: 1;
+}
+
+/* Three.js 3D chess board */
+.three-chess-container {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(34, 211, 238, 0.15);
+  box-shadow: 0 0 30px rgba(34, 211, 238, 0.12), inset 0 0 20px rgba(0, 0, 0, 0.4);
+  background: #060618;
+}
+
+.three-chess-container canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  cursor: grab;
+}
+
+.three-chess-container canvas:active {
+  cursor: grabbing;
+}
+
+.three-chess-hint {
+  position: absolute;
+  bottom: 10px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 0.75rem;
+  color: rgba(200, 220, 255, 0.45);
+  pointer-events: none;
+  user-select: none;
 }
 
 .game-meta .status.waiting { color: #ffaa00; }
