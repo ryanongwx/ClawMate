@@ -7,7 +7,7 @@ import rateLimit from "express-rate-limit";
 import { verifyMessage } from "ethers";
 import { v4 as uuidv4 } from "uuid";
 import { Chess } from "chess.js";
-import { initStore, loadLobbies, saveLobby } from "./store.js";
+import { initStore, loadLobbies, saveLobby, getLobbyFromStore, hydrateLobby } from "./store.js";
 
 const ts = () => new Date().toISOString();
 const log = (msg, data = null) => {
@@ -83,7 +83,9 @@ app.use((req, res, next) => {
 
 const PORT = process.env.PORT || 4000;
 
-// In-memory state: lobbyId -> { gameId (contract), betAmount, player1Wallet, player2Wallet?, chess (Chess.js), fen, status }
+// Game logic uses chess.js: FIDE rules (64-square, standard setup; King/Queen/Rook/Bishop/Knight/Pawn;
+// castling, en passant, promotion to Q/R/B/N; check/checkmate; stalemate; 50-move, threefold, insufficient material).
+// In-memory state: lobbyId -> { ..., drawOfferBy?: "white"|"black" (who offered draw; cleared on move/decline/withdraw) }
 const lobbies = new Map();
 // socket.id -> lobbyId for leave_lobby
 const gameToLobby = new Map();
@@ -110,18 +112,25 @@ if (process.env.ESCROW_CONTRACT_ADDRESS && process.env.RESOLVER_PRIVATE_KEY) {
 
 async function resolveEscrowIfNeeded(lobby) {
   if (!escrowContract || lobby.contractGameId == null || lobby.status !== "finished") return;
+  const gameId = typeof lobby.contractGameId === "string" ? parseInt(lobby.contractGameId, 10) : lobby.contractGameId;
+  if (Number.isNaN(gameId) || gameId < 1) {
+    logErr("Escrow resolveGame invalid gameId", { contractGameId: lobby.contractGameId });
+    return;
+  }
   const winnerAddress =
     lobby.winner === "white"
       ? lobby.player1Wallet
       : lobby.winner === "black"
         ? lobby.player2Wallet
         : null;
+  const winnerAddr = winnerAddress || "0x0000000000000000000000000000000000000000";
   try {
-    log("Escrow resolveGame", { lobbyId: lobby.lobbyId, contractGameId: lobby.contractGameId, winner: lobby.winner, winnerAddress: winnerAddress || "0x0" });
-    await escrowContract.resolveGame(lobby.contractGameId, winnerAddress || "0x0000000000000000000000000000000000000000");
-    log("Escrow resolveGame ok", { lobbyId: lobby.lobbyId, contractGameId: lobby.contractGameId });
+    log("Escrow resolveGame", { lobbyId: lobby.lobbyId, contractGameId: gameId, winner: lobby.winner, winnerAddress: winnerAddr });
+    await escrowContract.resolveGame(gameId, winnerAddr);
+    log("Escrow resolveGame ok", { lobbyId: lobby.lobbyId, contractGameId: gameId });
   } catch (e) {
     logErr("Escrow resolveGame failed", e);
+    // Common cause: "Not owner or resolver" — set RESOLVER_PRIVATE_KEY to the resolver wallet and call setResolver(resolverAddress) on the contract (owner only), or use deployer key as RESOLVER_PRIVATE_KEY.
   }
 }
 
@@ -159,6 +168,15 @@ function joinLobby(lobbyId, player2Wallet) {
   return true;
 }
 
+/** Compute draw reason when game is drawn (chess.js: stalemate, 50-move, threefold, insufficient material). */
+function getDrawReason(chess) {
+  if (chess.isStalemate()) return "stalemate";
+  if (chess.isDrawByFiftyMoves()) return "50-move";
+  if (chess.isThreefoldRepetition()) return "threefold";
+  if (chess.isInsufficientMaterial()) return "insufficient";
+  return "draw";
+}
+
 function applyMove(lobbyId, from, to, promotion = "q") {
   const lobby = lobbies.get(lobbyId);
   if (!lobby || lobby.status !== "playing") return { ok: false, reason: "invalid_lobby" };
@@ -166,18 +184,27 @@ function applyMove(lobbyId, from, to, promotion = "q") {
     const move = lobby.chess.move({ from, to, promotion });
     if (!move) return { ok: false, reason: "invalid_move" };
     lobby.fen = lobby.chess.fen();
+    lobby.drawOfferBy = null; // offer expires when a move is made
     if (lobby.chess.isCheckmate()) {
       lobby.status = "finished";
       lobby.winner = lobby.chess.turn() === "w" ? "black" : "white";
     } else if (lobby.chess.isDraw() || lobby.chess.isStalemate()) {
       lobby.status = "finished";
       lobby.winner = "draw";
+      lobby.drawReason = getDrawReason(lobby.chess);
     }
     if (lobby.status === "finished") {
-      log("Game finished (move)", { lobbyId, winner: lobby.winner, reason: lobby.chess.isCheckmate() ? "checkmate" : "draw" });
+      log("Game finished (move)", { lobbyId, winner: lobby.winner, reason: lobby.winner === "draw" ? lobby.drawReason : "checkmate" });
     }
     saveLobby(lobby).catch(() => {});
-    return { ok: true, fen: lobby.fen, move, winner: lobby.winner, status: lobby.status };
+    return {
+      ok: true,
+      fen: lobby.fen,
+      move,
+      winner: lobby.winner,
+      status: lobby.status,
+      drawReason: lobby.winner === "draw" ? lobby.drawReason : undefined,
+    };
   } catch (e) {
     return { ok: false, reason: "invalid_move" };
   }
@@ -275,10 +302,12 @@ app.get("/api/lobbies/:lobbyId", (req, res) => {
     fen: lobby.fen,
     status: lobby.status,
     winner: lobby.winner,
+    ...(lobby.winner === "draw" && lobby.drawReason ? { drawReason: lobby.drawReason } : {}),
+    ...(lobby.status === "playing" && lobby.drawOfferBy ? { drawOfferBy: lobby.drawOfferBy } : {}),
   });
 });
 
-app.post("/api/lobbies/:lobbyId/join", (req, res) => {
+app.post("/api/lobbies/:lobbyId/join", async (req, res) => {
   const { lobbyId } = req.params;
   if (!isValidLobbyId(lobbyId)) {
     return res.status(400).json({ error: "Invalid lobby id" });
@@ -295,12 +324,37 @@ app.post("/api/lobbies/:lobbyId/join", (req, res) => {
     return res.status(400).json({ error: "Invalid signature" });
   }
   log("POST /api/lobbies/:id/join", { lobbyId, player2Wallet: player2Wallet.slice(0, 10) + "…" });
+
+  // If lobby not in memory (e.g. created on another instance), try loading from store
+  let lobby = lobbies.get(lobbyId);
+  if (!lobby) {
+    const data = await getLobbyFromStore(lobbyId);
+    if (data) {
+      lobby = hydrateLobby(data, Chess);
+      lobbies.set(lobbyId, lobby);
+      log("Join: loaded lobby from store", { lobbyId });
+    }
+  }
+
+  if (!lobby) {
+    log("Join 404 lobby not found", { lobbyId });
+    return res.status(404).json({ error: "Lobby not found" });
+  }
+  if (lobby.status !== "waiting") {
+    log("Join 400 lobby not waiting", { lobbyId, status: lobby.status });
+    return res.status(400).json({ error: "Lobby is not open for joining" });
+  }
+  if (lobby.player2Wallet) {
+    log("Join 400 lobby already has player", { lobbyId });
+    return res.status(400).json({ error: "Lobby already has a player" });
+  }
+
   const ok = joinLobby(lobbyId, player2Wallet);
   if (!ok) {
-    log("Join 400 cannot join", { lobbyId });
+    log("Join 400 joinLobby failed", { lobbyId });
     return res.status(400).json({ error: "Cannot join lobby" });
   }
-  const lobby = lobbies.get(lobbyId);
+  lobby = lobbies.get(lobbyId);
   io.to(lobbyId).emit("lobby_joined", { player2Wallet, fen: lobby.fen });
   io.to(`wallet:${lobby.player1Wallet.toLowerCase()}`).emit("lobby_joined_yours", { lobbyId, player2Wallet, betAmount: lobby.betAmount });
   res.json({ ok: true, fen: lobby.fen });
@@ -401,7 +455,13 @@ app.get("/api/lobbies/:lobbyId/result", (req, res) => {
       : lobby.winner === "black"
         ? lobby.player2Wallet
         : null;
-  res.json({ status: "finished", winner: lobby.winner, winnerAddress });
+  const payload = {
+    status: "finished",
+    winner: lobby.winner,
+    winnerAddress,
+    ...(lobby.winner === "draw" && lobby.drawReason ? { drawReason: lobby.drawReason } : {}),
+  };
+  res.json(payload);
 });
 
 // Timeout: only the player who ran out of time can trigger (they sign; server sets winner to the other).
@@ -505,7 +565,13 @@ io.on("connection", (socket) => {
     }
     socket.join(lobbyId);
     log("Socket spectate_lobby", { socketId: socket.id, lobbyId });
-    socket.emit("game_state", { fen: lobby.fen, status: lobby.status, winner: lobby.winner });
+    socket.emit("game_state", {
+      fen: lobby.fen,
+      status: lobby.status,
+      winner: lobby.winner,
+      ...(lobby.winner === "draw" && lobby.drawReason ? { reason: lobby.drawReason } : {}),
+      ...(lobby.status === "playing" && lobby.drawOfferBy ? { drawOfferBy: lobby.drawOfferBy } : {}),
+    });
   });
 
   socket.on("move", ({ lobbyId, from, to, promotion }) => {
@@ -537,11 +603,102 @@ io.on("connection", (socket) => {
         fen: result.fen,
         winner: result.winner,
         status: result.status,
+        ...(result.winner === "draw" && result.drawReason ? { reason: result.drawReason } : {}),
       });
     } else {
       log("Socket move rejected", { lobbyId, from, to, reason: result.reason });
       socket.emit("move_error", { reason: result.reason });
     }
+  });
+
+  /** Get player color for a wallet in a lobby. Returns "white" | "black" | null. */
+  function getPlayerColor(lobby, wallet) {
+    if (!lobby || !wallet) return null;
+    const w = wallet.toLowerCase();
+    if (lobby.player1Wallet?.toLowerCase() === w) return "white";
+    if (lobby.player2Wallet?.toLowerCase() === w) return "black";
+    return null;
+  }
+
+  socket.on("offer_draw", (lobbyId) => {
+    if (!isValidLobbyId(lobbyId)) return;
+    const wallet = socketToWallet.get(socket.id);
+    const lobby = lobbies.get(lobbyId);
+    if (!lobby || lobby.status !== "playing") {
+      socket.emit("draw_error", { reason: "invalid_lobby" });
+      return;
+    }
+    const color = getPlayerColor(lobby, wallet);
+    if (!color) {
+      socket.emit("draw_error", { reason: "not_a_player" });
+      return;
+    }
+    lobby.drawOfferBy = color;
+    saveLobby(lobby).catch(() => {});
+    log("Draw offered", { lobbyId, by: color });
+    io.to(lobbyId).emit("draw_offered", { by: color });
+  });
+
+  socket.on("accept_draw", (lobbyId) => {
+    if (!isValidLobbyId(lobbyId)) return;
+    const wallet = socketToWallet.get(socket.id);
+    const lobby = lobbies.get(lobbyId);
+    if (!lobby || lobby.status !== "playing") {
+      socket.emit("draw_error", { reason: "invalid_lobby" });
+      return;
+    }
+    const color = getPlayerColor(lobby, wallet);
+    if (!color) {
+      socket.emit("draw_error", { reason: "not_a_player" });
+      return;
+    }
+    // Accept only if the *other* side offered (opponent offered)
+    if (lobby.drawOfferBy !== (color === "white" ? "black" : "white")) {
+      socket.emit("draw_error", { reason: "no_draw_offer" });
+      return;
+    }
+    lobby.status = "finished";
+    lobby.winner = "draw";
+    lobby.drawReason = "agreement";
+    lobby.drawOfferBy = null;
+    saveLobby(lobby).catch(() => {});
+    resolveEscrowIfNeeded(lobby).catch(() => {});
+    log("Draw accepted (agreement)", { lobbyId });
+    io.to(lobbyId).emit("move", {
+      fen: lobby.fen,
+      winner: "draw",
+      status: "finished",
+      reason: "agreement",
+    });
+  });
+
+  socket.on("decline_draw", (lobbyId) => {
+    if (!isValidLobbyId(lobbyId)) return;
+    const wallet = socketToWallet.get(socket.id);
+    const lobby = lobbies.get(lobbyId);
+    if (!lobby || lobby.status !== "playing") return;
+    const color = getPlayerColor(lobby, wallet);
+    if (!color) return;
+    // Decline: the player who *received* the offer (the other side) declines
+    if (lobby.drawOfferBy !== (color === "white" ? "black" : "white")) return;
+    lobby.drawOfferBy = null;
+    saveLobby(lobby).catch(() => {});
+    log("Draw declined", { lobbyId });
+    io.to(lobbyId).emit("draw_declined");
+  });
+
+  socket.on("withdraw_draw", (lobbyId) => {
+    if (!isValidLobbyId(lobbyId)) return;
+    const wallet = socketToWallet.get(socket.id);
+    const lobby = lobbies.get(lobbyId);
+    if (!lobby || lobby.status !== "playing") return;
+    const color = getPlayerColor(lobby, wallet);
+    if (!color) return;
+    if (lobby.drawOfferBy !== color) return; // only offerer can withdraw
+    lobby.drawOfferBy = null;
+    saveLobby(lobby).catch(() => {});
+    log("Draw offer withdrawn", { lobbyId });
+    io.to(lobbyId).emit("draw_declined");
   });
 
   socket.on("disconnect", (reason) => {

@@ -82,6 +82,8 @@ await client.connect();
   `const list = await client.getLobbies();`
   Pick a lobby, then `await client.joinLobby(lobby.lobbyId);` then `client.joinGame(lobby.lobbyId);` — you are **black**.
 
+**1 MON wager test (two agents):** Set `BET_MON=1`, `ESCROW_CONTRACT_ADDRESS`, and `RPC_URL` on both agents (use two different `PRIVATE_KEY` wallets). Backend must have `ESCROW_CONTRACT_ADDRESS` and `RESOLVER_PRIVATE_KEY` set. Start agent 1 (creates lobby with 1 MON), then agent 2 (joins with 1 MON). See `docs/agent-skill-clawmate.md` §5.12 for full steps.
+
 ### 4. Make moves
 
 Use **chess.js** with the current FEN to generate **legal moves** and choose one:

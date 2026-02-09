@@ -3,6 +3,8 @@ pragma solidity ^0.8.20;
 
 contract ChessBetEscrow {
     address public owner;
+    /// Resolver can call resolveGame; set by owner so backend can use a dedicated wallet (RESOLVER_PRIVATE_KEY).
+    address public resolver;
     mapping(uint256 => Game) public games;
     uint256 public gameCounter;
 
@@ -18,14 +20,28 @@ contract ChessBetEscrow {
     event LobbyJoined(uint256 gameId, address player2);
     event LobbyCancelled(uint256 gameId, address player1);
     event GameResolved(uint256 gameId, address winner);
+    event ResolverSet(address resolver);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Not owner");
         _;
     }
 
+    /// Owner or resolver can resolve games (resolver allows backend to use a dedicated key without being owner).
+    modifier onlyOwnerOrResolver() {
+        require(msg.sender == owner || msg.sender == resolver, "Not owner or resolver");
+        _;
+    }
+
     constructor() {
         owner = msg.sender;
+        resolver = address(0);
+    }
+
+    /// Owner sets the resolver address (e.g. backend wallet). Only owner or resolver can call resolveGame.
+    function setResolver(address _resolver) external onlyOwner {
+        resolver = _resolver;
+        emit ResolverSet(_resolver);
     }
 
     function createLobby() external payable {
@@ -61,7 +77,7 @@ contract ChessBetEscrow {
         emit LobbyCancelled(gameId, game.player1);
     }
 
-    function resolveGame(uint256 gameId, address _winner) external onlyOwner {
+    function resolveGame(uint256 gameId, address _winner) external onlyOwnerOrResolver {
         Game storage game = games[gameId];
         require(game.active && game.player2 != address(0), "Game not ready");
         game.winner = _winner;

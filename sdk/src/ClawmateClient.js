@@ -270,6 +270,42 @@ export class ClawmateClient extends EventEmitter {
   }
 
   /**
+   * Offer a draw (real-time). Opponent will receive "draw_offered" with { by: "white"|"black" }.
+   * @param {string} lobbyId
+   */
+  offerDraw(lobbyId) {
+    if (!this.socket) throw new Error("Call connect() first");
+    this.socket.emit("offer_draw", lobbyId);
+  }
+
+  /**
+   * Accept opponent's draw offer. Game ends in a draw; "move" event is emitted with winner: "draw", reason: "agreement".
+   * @param {string} lobbyId
+   */
+  acceptDraw(lobbyId) {
+    if (!this.socket) throw new Error("Call connect() first");
+    this.socket.emit("accept_draw", lobbyId);
+  }
+
+  /**
+   * Decline opponent's draw offer. Both sides receive "draw_declined".
+   * @param {string} lobbyId
+   */
+  declineDraw(lobbyId) {
+    if (!this.socket) throw new Error("Call connect() first");
+    this.socket.emit("decline_draw", lobbyId);
+  }
+
+  /**
+   * Withdraw your own draw offer. Both sides receive "draw_declined".
+   * @param {string} lobbyId
+   */
+  withdrawDraw(lobbyId) {
+    if (!this.socket) throw new Error("Call connect() first");
+    this.socket.emit("withdraw_draw", lobbyId);
+  }
+
+  /**
    * GET /api/lobbies/:lobbyId/result — get game result (winner address, status).
    * Only useful after the game is finished.
    * @param {string} lobbyId

@@ -179,7 +179,7 @@ Run backend with env and Redis; run frontend behind a reverse proxy that proxies
 | `MONGODB_URI` | No | MongoDB connection string for persistence (preferred over Redis if both set). |
 | `REDIS_URL` | No | Redis URL for persistence if not using MongoDB; omit for in-memory only. |
 | `ESCROW_CONTRACT_ADDRESS` | No | ChessBetEscrow contract address if resolving on-chain. |
-| `RESOLVER_PRIVATE_KEY` | No | Key for `resolveGame`; use secrets manager, never commit. |
+| `RESOLVER_PRIVATE_KEY` | No | Key for `resolveGame`; must be contract owner or the address set via `setResolver()` on the contract; use secrets manager, never commit. |
 | `MONAD_RPC_URL` / `RPC_URL` | If escrow | RPC for resolver. |
 
 ---
@@ -230,7 +230,11 @@ Rebuild and redeploy the frontend after changing these.
 
 - **`MONAD_RPC_URL`** or **`RPC_URL`** — mainnet RPC (e.g. `https://rpc.monad.xyz`).
 - **`ESCROW_CONTRACT_ADDRESS`** — same mainnet ChessBetEscrow address as the frontend.
-- **`RESOLVER_PRIVATE_KEY`** — key that will call `resolveGame` on mainnet. Must hold real MON for gas; use a dedicated resolver wallet and fund it on mainnet.
+- **`RESOLVER_PRIVATE_KEY`** — key that will call `resolveGame` on mainnet. Must hold real MON for gas.
+- **Critical:** The contract allows only the **owner** (deployer) or a **resolver** to call `resolveGame`. If you use a dedicated resolver wallet:
+  1. After deploying the contract, the **owner** must call **`setResolver(resolverAddress)`** on the contract, where `resolverAddress` is the address of the wallet whose private key is `RESOLVER_PRIVATE_KEY`.
+  2. Or set `RESOLVER_PRIVATE_KEY` to the **deployer’s** private key so the backend resolves as owner.
+- If this is not done, resolution will fail with "Not owner or resolver", wagers will stay in the contract, and the winner will not receive the pot.
 
 ### 4. Contracts (deploy ChessBetEscrow on mainnet)
 
@@ -238,6 +242,7 @@ Rebuild and redeploy the frontend after changing these.
 - Set **`MONAD_RPC_URL`** in `contracts/.env` to mainnet RPC.
 - Use a **mainnet-funded** **`PRIVATE_KEY`** for the deployer.
 - Run deploy: `npx hardhat run scripts/deploy.js --network monadMainnet`.
+- **Set resolver (required for payout):** Either set `RESOLVER_ADDRESS` in env before deploy (address of the wallet that will be used as `RESOLVER_PRIVATE_KEY` in the backend) so the deploy script calls `setResolver` for you, or after deploy call **`contract.setResolver(<backend_resolver_address>)`** as the owner. Otherwise the backend cannot resolve games and wagers will stay stuck.
 - Set the new contract address in frontend and backend env as above.
 
 ### 5. Users and funds

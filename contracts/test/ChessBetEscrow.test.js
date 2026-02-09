@@ -116,10 +116,19 @@ describe("ChessBetEscrow", function () {
       expect(p1After - p1Before).to.equal(betAmount);
       expect(p2After - p2Before).to.equal(betAmount);
     });
-    it("should revert when non-owner resolves", async function () {
+    it("should revert when non-owner and non-resolver resolves", async function () {
       await expect(
         escrow.connect(player1).resolveGame(1, player1.address)
-      ).to.be.revertedWith("Not owner");
+      ).to.be.revertedWith("Not owner or resolver");
+    });
+    it("should pay winner when resolver resolves after setResolver", async function () {
+      const [,,, resolver] = await ethers.getSigners();
+      await escrow.setResolver(resolver.address);
+      const before = await ethers.provider.getBalance(player2.address);
+      const tx = await escrow.connect(resolver).resolveGame(1, player2.address);
+      await tx.wait();
+      const after = await ethers.provider.getBalance(player2.address);
+      expect(after - before).to.equal(betAmount * 2n);
     });
     it("should revert when invalid winner", async function () {
       const invalidWinner = "0x0000000000000000000000000000000000000123";

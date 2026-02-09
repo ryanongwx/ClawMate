@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Routes, Route, useNavigate, useParams, useLocation } from "react-router-dom";
 import { formatEther } from "ethers";
 import { io } from "socket.io-client";
 import Landing from "./components/Landing";
@@ -31,43 +32,36 @@ function saveRulesAccepted() {
   } catch (_) {}
 }
 
-const TAB_LIVE = "live";
-
 export default function App() {
-  const [view, setView] = useState("landing"); // landing | lobbies | create | game | spectate
-  const [lobbyId, setLobbyId] = useState(null);
-  const [lobby, setLobby] = useState(null);
+  const navigate = useNavigate();
+  const location = useLocation();
   const [wallet, setWallet] = useState(null);
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [rulesAccepted, setRulesAccepted] = useState(loadRulesAccepted);
-  const [isTestGame, setIsTestGame] = useState(false);
   const [rejoinBanner, setRejoinBanner] = useState(null); // { lobbyId, lobby }
   const [toast, setToast] = useState(null); // { lobbyId, betAmount, player2Wallet } when someone joins your lobby
-  const [lobbyTab, setLobbyTab] = useState("open"); // "open" | "live" — which tab to show in LobbyList
+
+  const isInGame = location.pathname.startsWith("/game/");
 
   const openGame = (id, lobbyData, opts) => {
-    setLobbyId(id);
-    setLobby(lobbyData || null);
-    setIsTestGame(opts?.testMode ?? false);
-    setView("game");
     if (lobbyData?.status === "playing" && !opts?.testMode) {
       try {
         localStorage.setItem(CURRENT_GAME_KEY, JSON.stringify({ lobbyId: id, ...lobbyData }));
       } catch (_) {}
     }
+    navigate(`/game/${id}`, { state: { lobby: lobbyData || null, isTestGame: opts?.testMode ?? false } });
   };
 
   const backToLobbies = () => {
-    setLobbyId(null);
-    setLobby(null);
-    setIsTestGame(false);
-    setView("lobbies");
+    try {
+      localStorage.removeItem(CURRENT_GAME_KEY);
+    } catch (_) {}
+    setRejoinBanner(null);
+    navigate("/lobbies");
   };
 
   const openSpectate = (id) => {
-    setLobbyId(id);
-    setLobby(null);
-    setView("spectate");
+    navigate(`/watch/${id}`);
   };
 
   const clearCurrentGame = () => {
@@ -79,7 +73,7 @@ export default function App() {
 
   const onGameEnd = () => {
     clearCurrentGame();
-    backToLobbies();
+    navigate("/lobbies");
   };
 
   useEffect(() => {
@@ -104,7 +98,7 @@ export default function App() {
   }, [toast]);
 
   useEffect(() => {
-    if (!wallet || view === "game") return;
+    if (!wallet || isInGame) return;
     const raw = localStorage.getItem(CURRENT_GAME_KEY);
     if (!raw) return;
     let stored;
@@ -129,7 +123,7 @@ export default function App() {
       }
     };
     fetchLobby();
-  }, [wallet, view]);
+  }, [wallet, isInGame]);
 
   const dismissRejoin = () => {
     clearCurrentGame();
@@ -153,15 +147,19 @@ export default function App() {
       .catch(() => setToast(null));
   };
 
+  const handleLobbyTabChange = (tab) => {
+    navigate(tab === "live" ? "/livegames" : "/lobbies");
+  };
+
   return (
     <div className="app clawgig-style">
       <header className="header">
-        <a href="#" className="header-logo" onClick={(e) => { e.preventDefault(); setView("landing"); }}>
+        <a href="/" className="header-logo" onClick={(e) => { e.preventDefault(); navigate("/"); }}>
           ClawMate
         </a>
         <nav className="header-nav">
-          {view === "landing" && (
-            <button type="button" className="btn btn-nav" onClick={() => setView("lobbies")}>
+          {location.pathname === "/" && (
+            <button type="button" className="btn btn-nav" onClick={() => navigate("/lobbies")}>
               Play
             </button>
           )}
@@ -194,7 +192,7 @@ export default function App() {
         </div>
       )}
 
-      {rejoinBanner && view !== "game" && (
+      {rejoinBanner && !isInGame && (
         <div className="rejoin-banner" role="region" aria-label="Active match">
           <span className="rejoin-banner-text">You have an active match. Rejoin to continue.</span>
           <div className="rejoin-banner-actions">
@@ -210,64 +208,98 @@ export default function App() {
 
       <main className="main">
         <ErrorBoundary onReset={backToLobbies}>
-          {view === "landing" && (
-            <Landing
-              onPlayNow={() => setView("lobbies")}
-              onShowRules={() => setShowRulesModal(true)}
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <Landing
+                  onPlayNow={() => navigate("/lobbies")}
+                  onShowRules={() => setShowRulesModal(true)}
+                />
+              }
             />
-          )}
-          {view === "lobbies" && (
-            <>
-              <LobbyList
+            <Route
+              path="/lobbies"
+              element={
+                <LobbyList
+                  wallet={wallet}
+                  rulesAccepted={rulesAccepted}
+                  onShowRules={() => setShowRulesModal(true)}
+                  onJoinLobby={openGame}
+                  onCreateClick={() => {
+                    if (!rulesAccepted) {
+                      setShowRulesModal(true);
+                      return;
+                    }
+                    navigate("/create");
+                  }}
+                  onSpectate={openSpectate}
+                  activeTab="open"
+                  onTabChange={handleLobbyTabChange}
+                />
+              }
+            />
+            <Route
+              path="/livegames"
+              element={
+                <LobbyList
+                  wallet={wallet}
+                  rulesAccepted={rulesAccepted}
+                  onShowRules={() => setShowRulesModal(true)}
+                  onJoinLobby={openGame}
+                  onCreateClick={() => {
+                    if (!rulesAccepted) {
+                      setShowRulesModal(true);
+                      return;
+                    }
+                    navigate("/create");
+                  }}
+                  onSpectate={openSpectate}
+                  activeTab="live"
+                  onTabChange={handleLobbyTabChange}
+                />
+              }
+            />
+            <Route path="/create" element={
+              <CreateLobby
                 wallet={wallet}
                 rulesAccepted={rulesAccepted}
                 onShowRules={() => setShowRulesModal(true)}
-                onJoinLobby={openGame}
-                onCreateClick={() => {
-                  if (!rulesAccepted) {
-                    setShowRulesModal(true);
-                    return;
-                  }
-                  setView("create");
-                }}
-                onSpectate={openSpectate}
-                activeTab={lobbyTab}
-                onTabChange={setLobbyTab}
+                onCreated={openGame}
+                onBack={() => navigate("/lobbies")}
               />
-            </>
-          )}
-          {view === "create" && (
-            <CreateLobby
-              wallet={wallet}
-              rulesAccepted={rulesAccepted}
-              onShowRules={() => setShowRulesModal(true)}
-              onCreated={openGame}
-              onBack={() => setView("lobbies")}
-            />
-          )}
-          {view === "game" && lobbyId && (
-            <GameView
-              lobbyId={lobbyId}
-              lobby={lobby}
-              wallet={wallet}
-              socket={socket}
-              onBack={backToLobbies}
-              onGameEnd={onGameEnd}
-              isTestGame={isTestGame}
-            />
-          )}
-          {view === "spectate" && lobbyId && (
-            <SpectateView
-              lobbyId={lobbyId}
-              socket={socket}
-              onBack={() => {
-                setLobbyTab(TAB_LIVE);
-                backToLobbies();
-              }}
-            />
-          )}
+            } />
+            <Route path="/watch/:lobbyId" element={<SpectateRoute socket={socket} onBack={() => navigate("/livegames")} />} />
+            <Route path="/game/:lobbyId" element={<GameRoute wallet={wallet} socket={socket} onBack={backToLobbies} onGameEnd={onGameEnd} />} />
+          </Routes>
         </ErrorBoundary>
       </main>
     </div>
+  );
+}
+
+function SpectateRoute({ socket, onBack }) {
+  const { lobbyId } = useParams();
+  if (!lobbyId) return null;
+  return <SpectateView lobbyId={lobbyId} socket={socket} onBack={onBack} />;
+}
+
+function GameRoute({ wallet, socket, onBack, onGameEnd }) {
+  const { lobbyId } = useParams();
+  const location = useLocation();
+  const state = location.state || {};
+  const initialLobby = state.lobby ?? null;
+  const isTestGame = state.isTestGame ?? false;
+  if (!lobbyId) return null;
+  return (
+    <GameView
+      lobbyId={lobbyId}
+      lobby={initialLobby}
+      wallet={wallet}
+      socket={socket}
+      onBack={onBack}
+      onGameEnd={onGameEnd}
+      isTestGame={isTestGame}
+    />
   );
 }

@@ -20,11 +20,19 @@ export default function GameOverModal({ winner, reason, onClose }) {
           ? "Opponent conceded."
           : reason === "checkmate"
             ? "By checkmate."
-            : reason === "stalemate"
-              ? "Stalemate."
-              : reason === "draw"
-                ? "Draw by agreement or rule."
-                : "";
+            : reason === "agreement"
+              ? "Draw by agreement."
+              : reason === "stalemate"
+                ? "Stalemate."
+                : reason === "50-move"
+                ? "Draw by 50-move rule."
+                : reason === "threefold"
+                  ? "Draw by threefold repetition."
+                  : reason === "insufficient"
+                    ? "Draw by insufficient material."
+                    : reason === "draw"
+                      ? "Draw by agreement or rule."
+                      : "";
 
   return (
     <div className="modal-overlay game-over-overlay" onClick={onClose}>

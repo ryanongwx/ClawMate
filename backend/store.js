@@ -20,21 +20,12 @@ function serializeLobby(lobby) {
     fen: lobby.fen || null,
     status: lobby.status || "waiting",
     winner: lobby.winner ?? null,
+    drawReason: lobby.drawReason ?? null,
     createdAt: lobby.createdAt ?? Date.now(),
   };
 }
 
 const DEFAULT_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-
-function hydrateLobby(data, Chess) {
-  const fen = data.fen || DEFAULT_FEN;
-  const chess = new Chess(fen);
-  return {
-    ...data,
-    chess,
-    fen: data.fen || chess.fen(),
-  };
-}
 
 // Store mode: "mongo" | "redis" | null (in-memory)
 let storeMode = null;
@@ -80,6 +71,53 @@ export async function initStore() {
   if (storeMode === null) {
     log("No MONGODB_URI or REDIS_URL; using in-memory only");
   }
+}
+
+/**
+ * Load a single lobby from the store by id. Returns raw lobby data (no Chess instance).
+ * Used when a join request hits an instance that doesn't have the lobby in memory (e.g. lobby was created on another instance).
+ * @param {string} lobbyId
+ * @returns {Promise<object | null>} Raw lobby data or null
+ */
+export async function getLobbyFromStore(lobbyId) {
+  if (!lobbyId) return null;
+  if (storeMode === "mongo" && mongoCollection) {
+    try {
+      const doc = await mongoCollection.findOne({ lobbyId });
+      if (!doc) return null;
+      return { ...doc, _id: undefined };
+    } catch (e) {
+      console.warn("[store] getLobbyFromStore (MongoDB) failed", lobbyId, e.message);
+      return null;
+    }
+  }
+  if (storeMode === "redis" && redis) {
+    try {
+      const raw = await redis.get(REDIS_PREFIX + lobbyId);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) {
+      console.warn("[store] getLobbyFromStore (Redis) failed", lobbyId, e.message);
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Hydrate raw lobby data into a full lobby object (with Chess instance). Exported for use in server when loading a single lobby.
+ * @param {object} data - Raw lobby data from store
+ * @param {typeof import('chess.js')} Chess - Chess constructor
+ * @returns {object} Lobby object with chess, fen
+ */
+export function hydrateLobby(data, Chess) {
+  const fen = data.fen || DEFAULT_FEN;
+  const chess = new Chess(fen);
+  return {
+    ...data,
+    chess,
+    fen: data.fen || chess.fen(),
+  };
 }
 
 /**

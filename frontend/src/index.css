@@ -1021,6 +1021,8 @@ h1, h2, h3 {
   box-shadow: 0 0 0 2px rgba(0, 255, 255, 0.15);
 }
 
+/* Open lobbies and Live games: 3 columns, same breakpoints */
+.lobby-cards-open,
 .lobby-cards-live {
   margin: 0;
   display: grid;
@@ -1029,12 +1031,14 @@ h1, h2, h3 {
 }
 
 @media (max-width: 900px) {
+  .lobby-cards-open,
   .lobby-cards-live {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (max-width: 560px) {
+  .lobby-cards-open,
   .lobby-cards-live {
     grid-template-columns: 1fr;
   }
@@ -1458,6 +1462,33 @@ h1, h2, h3 {
 .game-meta .status.waiting { color: #ffaa00; }
 .game-meta .status.playing { color: var(--accent-cyan); }
 .game-meta .status.finished { color: #66ff66; }
+
+.game-meta .draw-offer-label {
+  color: var(--accent-cyan);
+  font-size: 0.85rem;
+}
+
+.game-meta .btn-offer-draw {
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  background: transparent;
+  border: 1px solid rgba(34, 211, 238, 0.5);
+  color: var(--accent-cyan);
+}
+.game-meta .btn-offer-draw:hover:not(:disabled) {
+  background: rgba(34, 211, 238, 0.15);
+}
+
+.game-meta .btn-draw-accept {
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  background: rgba(34, 211, 238, 0.2);
+  border: 1px solid var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+.game-meta .btn-draw-accept:hover:not(:disabled) {
+  background: rgba(34, 211, 238, 0.3);
+}
 
 .game-meta .btn-concede {
   margin-left: auto;

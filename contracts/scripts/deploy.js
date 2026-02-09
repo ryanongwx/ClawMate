@@ -11,6 +11,20 @@ async function main() {
   await contract.waitForDeployment();
   const addr = await contract.getAddress();
   console.log("ChessBetEscrow deployed to:", addr);
+
+  // Optional: set resolver so the backend (RESOLVER_PRIVATE_KEY) can call resolveGame without being owner.
+  const resolverAddress = process.env.RESOLVER_ADDRESS;
+  if (resolverAddress && resolverAddress.startsWith("0x")) {
+    try {
+      const tx = await contract.setResolver(resolverAddress);
+      await tx.wait();
+      console.log("Resolver set to:", resolverAddress);
+    } catch (e) {
+      console.warn("setResolver failed:", e.message);
+    }
+  } else {
+    console.log("RESOLVER_ADDRESS not set — only owner can resolve. Set resolver with: contract.setResolver(<backend_resolver_address>)");
+  }
 }
 
 main().catch((err) => {

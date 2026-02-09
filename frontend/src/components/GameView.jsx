@@ -29,6 +29,8 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
   const [showConcedeConfirm, setShowConcedeConfirm] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [concedeLoading, setConcedeLoading] = useState(false);
+  const [drawOfferBy, setDrawOfferBy] = useState(null); // "white" | "black" | null (who offered draw)
+  const [drawActionLoading, setDrawActionLoading] = useState(false);
   const timersInitialized = useRef(false);
   const lobbyRef = useRef(initialLobby);
   useEffect(() => {
@@ -68,6 +70,10 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
     const onMove = (payload) => {
       setFen(payload.fen);
       if (payload.status) setStatus(payload.status);
+      if (payload.status === "finished") {
+        setDrawOfferBy(null);
+        setDrawActionLoading(false);
+      }
       if (payload.winner != null) {
         setWinner(payload.winner);
         if (payload.concede) {
@@ -76,7 +82,7 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
           const weWon = (payload.winner === "white" && isWhite) || (payload.winner === "black" && !isWhite);
           setGameOverReason(weWon ? "opponent_concede" : "concede");
         } else {
-          setGameOverReason(payload.winner === "draw" ? "draw" : "checkmate");
+          setGameOverReason(payload.winner === "draw" ? (payload.reason || "draw") : "checkmate");
         }
         setShowGameOverModal(true);
       }
@@ -85,11 +91,23 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
       setFen(payload.fen);
       setStatus("playing");
     };
+    const onDrawOffered = (payload) => setDrawOfferBy(payload?.by ?? null);
+    const onDrawDeclined = () => setDrawOfferBy(null);
+    const onDrawError = () => {
+      setDrawOfferBy(null);
+      setDrawActionLoading(false);
+    };
     socket.on("move", onMove);
     socket.on("lobby_joined", onLobbyJoined);
+    socket.on("draw_offered", onDrawOffered);
+    socket.on("draw_declined", onDrawDeclined);
+    socket.on("draw_error", onDrawError);
     return () => {
       socket.off("move", onMove);
       socket.off("lobby_joined", onLobbyJoined);
+      socket.off("draw_offered", onDrawOffered);
+      socket.off("draw_declined", onDrawDeclined);
+      socket.off("draw_error", onDrawError);
     };
   }, [socket]);
 
@@ -104,9 +122,10 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
           if (data.status) setStatus(data.status);
           if (data.winner != null) {
             setWinner(data.winner);
-            setGameOverReason(data.winner === "draw" ? "draw" : "checkmate");
+            setGameOverReason(data.winner === "draw" ? (data.drawReason || "draw") : "checkmate");
             setShowGameOverModal(true);
           }
+          if (data.status === "playing" && data.drawOfferBy != null) setDrawOfferBy(data.drawOfferBy);
         })
         .catch(() => {});
     }
@@ -230,14 +249,73 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
           </span>
         )}
         {status === "playing" && !isTestGame && wallet && (
-          <button
-            type="button"
-            className="btn btn-concede"
-            onClick={() => setShowConcedeConfirm(true)}
-            title="Concede and lose the game"
-          >
-            Concede
-          </button>
+          <>
+            {drawOfferBy === (isWhite ? "black" : "white") ? (
+              <>
+                <span className="status draw-offer-label">Opponent offered a draw</span>
+                <button
+                  type="button"
+                  className="btn btn-draw-accept"
+                  onClick={() => {
+                    setDrawActionLoading(true);
+                    socket.emit("accept_draw", lobbyId);
+                  }}
+                  disabled={drawActionLoading}
+                  title="Accept draw"
+                >
+                  {drawActionLoading ? "Accepting…" : "Accept draw"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    socket.emit("decline_draw", lobbyId);
+                    setDrawOfferBy(null);
+                  }}
+                  disabled={drawActionLoading}
+                  title="Decline draw"
+                >
+                  Decline
+                </button>
+              </>
+            ) : drawOfferBy === (isWhite ? "white" : "black") ? (
+              <>
+                <span className="status draw-offer-label">Draw offer sent</span>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    socket.emit("withdraw_draw", lobbyId);
+                    setDrawOfferBy(null);
+                  }}
+                  disabled={drawActionLoading}
+                  title="Withdraw draw offer"
+                >
+                  Withdraw offer
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-offer-draw"
+                onClick={() => {
+                  socket.emit("offer_draw", lobbyId);
+                  setDrawOfferBy(isWhite ? "white" : "black");
+                }}
+                title="Offer a draw to your opponent"
+              >
+                Offer draw
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-concede"
+              onClick={() => setShowConcedeConfirm(true)}
+              title="Concede and lose the game"
+            >
+              Concede
+            </button>
+          </>
         )}
       </div>
 

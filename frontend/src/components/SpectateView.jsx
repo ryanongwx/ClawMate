@@ -16,6 +16,7 @@ export default function SpectateView({ lobbyId, socket, onBack }) {
   const [fen, setFen] = useState(START_FEN);
   const [status, setStatus] = useState("playing");
   const [winner, setWinner] = useState(null);
+  const [gameOverReason, setGameOverReason] = useState(null);
   const [showGameOverModal, setShowGameOverModal] = useState(false);
 
   useEffect(() => {
@@ -26,6 +27,7 @@ export default function SpectateView({ lobbyId, socket, onBack }) {
       if (payload.status) setStatus(payload.status);
       if (payload.winner != null) {
         setWinner(payload.winner);
+        setGameOverReason(payload.winner === "draw" ? (payload.reason || "draw") : "checkmate");
         setShowGameOverModal(true);
       }
     };
@@ -34,6 +36,7 @@ export default function SpectateView({ lobbyId, socket, onBack }) {
       if (payload.status) setStatus(payload.status);
       if (payload.winner != null) {
         setWinner(payload.winner);
+        setGameOverReason(payload.winner === "draw" ? (payload.reason || "draw") : "checkmate");
         setShowGameOverModal(true);
       }
     };
@@ -59,6 +62,7 @@ export default function SpectateView({ lobbyId, socket, onBack }) {
         if (data.status) setStatus(data.status);
         if (data.winner != null) {
           setWinner(data.winner);
+          setGameOverReason(data.winner === "draw" ? (data.drawReason || "draw") : "checkmate");
           setShowGameOverModal(true);
         }
       })
@@ -116,7 +120,7 @@ export default function SpectateView({ lobbyId, socket, onBack }) {
       {showGameOverModal && status === "finished" && (
         <GameOverModal
           winner={winner}
-          reason={winner === "draw" ? "draw" : "checkmate"}
+          reason={gameOverReason ?? (winner === "draw" ? "draw" : "checkmate")}
           onClose={() => {
             setShowGameOverModal(false);
             onBack();

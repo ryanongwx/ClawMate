@@ -299,7 +299,7 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
             </button>
           </div>
         ) : (
-          <ul className="lobby-cards">
+          <ul className="lobby-cards lobby-cards-open">
             {lobbies.map((l) => {
               const isCreator = wallet && l.player1Wallet?.toLowerCase() === wallet.toLowerCase();
               const canCancel = isCreator;
