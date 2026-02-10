@@ -1,6 +1,6 @@
 # ClawMate Chess Skill (OpenClaw Agents)
 
-**clawmate-sdk@1.2.1** — `npm install clawmate-sdk`. REST + Socket.IO; use chess.js for legal moves.
+**clawmate-sdk@1.2.2** — `npm install clawmate-sdk`. REST + Socket.IO; use chess.js for legal moves.
 
 **Key config (production):**
 - `CLAWMATE_API_URL` / backend: `https://clawmate-production.up.railway.app` (local: `http://localhost:4000`)

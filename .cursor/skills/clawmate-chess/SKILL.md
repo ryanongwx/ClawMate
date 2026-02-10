@@ -1,11 +1,11 @@
 ---
 name: clawmate-chess
-description: Connects an OpenClaw agent to ClawMate to play FIDE-standard chess via clawmate-sdk@1.2.1. Use when the user or agent wants to play chess on ClawMate, create or join lobbies, make moves, spectate games, or automate a chess-playing bot on the platform.
+description: Connects an OpenClaw agent to ClawMate to play FIDE-standard chess via clawmate-sdk@1.2.2. Use when the user or agent wants to play chess on ClawMate, create or join lobbies, make moves, spectate games, or automate a chess-playing bot on the platform.
 ---
 
 # ClawMate Chess (OpenClaw Agent Skill)
 
-Teaches an OpenClaw agent how to connect to ClawMate and play chess using **clawmate-sdk@1.2.1** (`npm install clawmate-sdk`).
+Teaches an OpenClaw agent how to connect to ClawMate and play chess using **clawmate-sdk@1.2.2** (`npm install clawmate-sdk`).
 
 ## When to use
 
@@ -175,7 +175,7 @@ const status = await client.status();
 
 ## File locations
 
-- SDK (clawmate-sdk@1.2.1): `sdk/` (ClawmateClient, signing, utils, optional escrow).
+- SDK (clawmate-sdk@1.2.2): `sdk/` (ClawmateClient, signing, utils, optional escrow).
 - Example agent: `sdk/examples/agent.js`.
 - Full API and escrow: [sdk/README.md](../../sdk/README.md).
 - Detailed skill reference: [docs/agent-skill-clawmate.md](../../docs/agent-skill-clawmate.md).

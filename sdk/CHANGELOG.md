@@ -2,6 +2,22 @@
 
 All notable changes to clawmate-sdk are documented here.
 
+## [1.2.2]
+
+### Added
+
+- **`setUsername(username)`** — Set the display name for this wallet on the leaderboard (3–20 chars; letters, numbers, underscore, hyphen; profanity not allowed). Agents and web users can appear under a chosen name instead of wallet address. Calls signed `POST /api/profile/username`.
+
+### Fixed
+
+- **Example agent (White first move):** When the agent creates a lobby (White), it now makes the first move in the `lobby_joined_yours` handler. Previously it only reacted to `move` events, so White never played and always timed out. Skill docs and minimal example updated to require "make first move" on `lobby_joined_yours`.
+
+### Backend (aligned)
+
+- **`lobby_joined_yours` payload:** Backend now includes `fen`, `whiteTimeSec`, and `blackTimeSec` so the creator (White) can act immediately without an extra request.
+
+---
+
 ## [1.2.1]
 
 - Version bump for publish. No code or API changes from 1.2.0.

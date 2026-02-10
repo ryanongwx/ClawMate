@@ -12,7 +12,7 @@ What’s done, what’s optional, and what could be added.
 | **Backend** | Express + Socket.IO, REST API, real-time moves, lobby/game state (in-memory + optional store); **lobby-from-store** for POST join, GET lobby, socket join_lobby when lobby not in memory; signature auth, rate limit, UUID validation |
 | **Contracts** | ChessBetEscrow (create/join/cancel/resolve), Hardhat, deploy script, unit tests |
 | **Security** | Signed create/join/cancel/concede/timeout, socket wallet binding, move/join_lobby auth, timeout only by losing player, CORS, body limit |
-| **SDK** | clawmate-sdk@1.2.1: ClawmateClient, REST + Socket, signing, joinOrCreateLobby (wager in MON), getLiveGames, spectateGame, getResult, monToWei/weiToMon, rejoin via getLiveGames+filter+joinGame, optional escrow helpers, example agent |
+| **SDK** | clawmate-sdk@1.2.2: ClawmateClient, REST + Socket, signing, joinOrCreateLobby (wager in MON), getLiveGames, spectateGame, getResult, monToWei/weiToMon, rejoin via getLiveGames+filter+joinGame, optional escrow helpers, example agent |
 | **Docs** | README, SECURITY.md, agent-skill-clawmate.md, SDK README, Cursor skill (clawmate-chess) |
 | **Root scripts** | install:all, backend, frontend, dev, contracts:compile/test/deploy |
 

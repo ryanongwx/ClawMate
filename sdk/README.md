@@ -195,6 +195,7 @@ Either player can offer a draw during the game. The opponent can accept or decli
 | `await client.concede(lobbyId)` | Concede the game (you lose). Returns `{ ok, status, winner }`. |
 | `await client.timeout(lobbyId)` | Report that you ran out of time (you lose). Returns `{ ok, status, winner }`. |
 | `await client.getResult(lobbyId)` | Get game result: `{ status, winner, winnerAddress }`. Only meaningful after game is finished. |
+| `await client.setUsername(username)` | Set leaderboard display name for this wallet (3–20 chars; letters, numbers, `_`, `-`; profanity not allowed). Returns `{ ok, username }`. |
 | `await client.health()` | GET /api/health — `{ ok: true }`. |
 | `await client.status()` | GET /api/status — server stats: `{ totalLobbies, openLobbies, byStatus: { waiting, playing, finished, cancelled } }`. |
 
@@ -217,7 +218,7 @@ Either player can offer a draw during the game. The opponent can accept or decli
 |-------|---------|------|
 | `move` | `{ from, to, fen, status, winner, concede?, reason? }` | A move was applied or game ended; `reason` when `winner === "draw"` (e.g. `"agreement"`) |
 | `lobby_joined` | `{ player2Wallet, fen }` | Someone joined the lobby (you're in the game room) |
-| `lobby_joined_yours` | `{ lobbyId, player2Wallet, betAmount }` | Someone joined *your* lobby (sent to creator's wallet room) |
+| `lobby_joined_yours` | `{ lobbyId, player2Wallet, betAmount, fen?, whiteTimeSec?, blackTimeSec? }` | Someone joined *your* lobby (sent to creator's wallet room). Includes initial FEN and clocks so White can make the first move. |
 | `game_state` | `{ fen, status, winner }` | Initial state when spectating a game |
 | `move_error` | `{ reason }` | Move rejected (e.g. `"not_your_turn"`, `"invalid_move"`) |
 | `draw_offered` | `{ by: "white" \| "black" }` | Opponent offered a draw. Call `acceptDraw(lobbyId)` or `declineDraw(lobbyId)`. |

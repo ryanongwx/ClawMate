@@ -162,10 +162,10 @@ export default function WalletBar({ wallet, setWallet }) {
         setMyUsername(data.username || trimmed);
         setShowSetName(false);
       } else {
-        setNameError(data.error || "Failed to set name");
+        setNameError(data.error || "Failed to set username");
       }
     } catch (e) {
-      setNameError(e?.message || "Failed to set name");
+      setNameError(e?.message || "Failed to set username");
     } finally {
       setSavingName(false);
     }
@@ -179,14 +179,14 @@ export default function WalletBar({ wallet, setWallet }) {
           <span className="wallet-addr" title={wallet}>
             {myUsername || `${wallet.slice(0, 6)}…${wallet.slice(-4)}`}
           </span>
-          <button type="button" className="btn btn-ghost wallet-set-name" onClick={openSetName} title="Set leaderboard name">
-            Set name
+          <button type="button" className="btn btn-ghost wallet-set-name" onClick={openSetName} title="Set username for leaderboard">
+            Set Username
           </button>
           <button type="button" className="btn btn-ghost" onClick={disconnect}>Disconnect</button>
           {showSetName && (
-            <div className="wallet-name-modal" role="dialog" aria-label="Set leaderboard name">
+            <div className="wallet-name-modal" role="dialog" aria-label="Set username">
               <div className="wallet-name-modal-inner">
-                <label htmlFor="wallet-username-input">Leaderboard name</label>
+                <label htmlFor="wallet-username-input">Username</label>
                 <input
                   id="wallet-username-input"
                   type="text"
