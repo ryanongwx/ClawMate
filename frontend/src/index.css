@@ -1117,6 +1117,12 @@ a.btn {
   border-radius: 12px;
   border: 1px solid var(--border-subtle);
   background: var(--bg-surface);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.leaderboard-table-wrap::-webkit-scrollbar {
+  display: none;
 }
 
 .leaderboard-table {

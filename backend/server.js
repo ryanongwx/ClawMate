@@ -278,10 +278,10 @@ app.post("/api/lobbies", async (req, res) => {
   });
 });
 
-app.get("/api/lobbies", (req, res) => {
+app.get("/api/lobbies", async (req, res) => {
   const statusFilter = req.query.status; // "waiting" | "playing" | omit (default: waiting)
   const filter = statusFilter === "playing" ? (l) => l.status === "playing" : (l) => l.status === "waiting";
-  const list = Array.from(lobbies.values())
+  let list = Array.from(lobbies.values())
     .filter(filter)
     .map((l) => ({
       lobbyId: l.lobbyId,
@@ -298,6 +298,19 @@ app.get("/api/lobbies", (req, res) => {
           }
         : {}),
     }));
+
+  // Exclude any "waiting" lobby that is cancelled in the store (e.g. cancelled on another instance or by a previous request)
+  if (statusFilter !== "playing" && list.length > 0) {
+    const withStoreStatus = await Promise.all(
+      list.map(async (item) => {
+        const fromStore = await getLobbyFromStore(item.lobbyId);
+        if (fromStore && fromStore.status === "cancelled") return null;
+        return item;
+      })
+    );
+    list = withStoreStatus.filter(Boolean);
+  }
+
   log("GET /api/lobbies", { count: list.length, statusFilter: statusFilter ?? "waiting", lobbyIds: list.map((l) => l.lobbyId) });
   res.json({ lobbies: list });
 });
@@ -390,12 +403,12 @@ app.post("/api/lobbies/:lobbyId/join", async (req, res) => {
 });
 
 // Creator cancels waiting lobby (before opponent joins). Call after on-chain cancel to keep backend in sync.
-app.post("/api/lobbies/:lobbyId/cancel", (req, res) => {
+app.post("/api/lobbies/:lobbyId/cancel", async (req, res) => {
   const { lobbyId } = req.params;
   if (!isValidLobbyId(lobbyId)) {
     return res.status(400).json({ error: "Invalid lobby id" });
   }
-  const lobby = lobbies.get(lobbyId);
+  let lobby = lobbies.get(lobbyId);
   const { message, signature } = req.body || {};
   if (!message || !signature) {
     return res.status(400).json({ error: "message and signature required" });
@@ -408,10 +421,30 @@ app.post("/api/lobbies/:lobbyId/cancel", (req, res) => {
     return res.status(400).json({ error: "Invalid signature" });
   }
   log("POST /api/lobbies/:id/cancel", { lobbyId, playerWallet: playerWallet.slice(0, 10) + "…" });
+
+  // If not in memory (e.g. different instance or restart), try loading from store so we can persist "cancelled"
   if (!lobby) {
-    log("Cancel 404", { lobbyId });
+    const data = await getLobbyFromStore(lobbyId);
+    if (data && data.status === "waiting" && (data.player1Wallet || "").toLowerCase() === playerWallet) {
+      await saveLobby({ ...data, status: "cancelled" });
+      log("Lobby cancelled (from store)", { lobbyId });
+      return res.json({ ok: true });
+    }
+    if (!data) {
+      log("Cancel 404", { lobbyId });
+      return res.status(404).json({ error: "Lobby not found" });
+    }
+    if ((data.player1Wallet || "").toLowerCase() !== playerWallet) {
+      log("Cancel 403 not creator", { lobbyId });
+      return res.status(403).json({ error: "Only the lobby creator can cancel" });
+    }
+    if (data.status !== "waiting") {
+      log("Cancel 400 not waiting", { lobbyId, status: data.status });
+      return res.status(400).json({ error: "Lobby is not waiting" });
+    }
     return res.status(404).json({ error: "Lobby not found" });
   }
+
   if (lobby.player1Wallet?.toLowerCase() !== playerWallet) {
     log("Cancel 403 not creator", { lobbyId });
     return res.status(403).json({ error: "Only the lobby creator can cancel" });

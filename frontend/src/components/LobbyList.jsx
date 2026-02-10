@@ -513,6 +513,7 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
                     <th className="lb-rank">#</th>
                     <th className="lb-wallet">Wallet</th>
                     <th className="lb-pnl">PnL (MON)</th>
+                    <th className="lb-stat">Played</th>
                     <th className="lb-stat">Won</th>
                     <th className="lb-stat">Lost</th>
                     <th className="lb-stat">Drawn</th>
@@ -524,6 +525,7 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
                     const pnlNum = parseFloat(pnlMon);
                     const pnlClass = pnlNum > 0 ? "lb-positive" : pnlNum < 0 ? "lb-negative" : "";
                     const isMe = wallet && entry.wallet?.toLowerCase() === wallet.toLowerCase();
+                    const played = (entry.wins || 0) + (entry.losses || 0) + (entry.draws || 0);
                     return (
                       <tr key={entry.wallet} className={isMe ? "lb-row-me" : ""}>
                         <td className="lb-rank">{i + 1}</td>
@@ -532,6 +534,7 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
                           {isMe && <span className="lb-you-badge">You</span>}
                         </td>
                         <td className={`lb-pnl ${pnlClass}`}>{pnlNum > 0 ? "+" : ""}{pnlMon}</td>
+                        <td className="lb-stat">{played}</td>
                         <td className="lb-stat">{entry.wins}</td>
                         <td className="lb-stat">{entry.losses}</td>
                         <td className="lb-stat">{entry.draws}</td>
