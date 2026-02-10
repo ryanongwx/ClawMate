@@ -33,12 +33,15 @@ const DEFAULT_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 let storeMode = null;
 let mongoClient = null;
 let mongoCollection = null;
+let mongoProfilesCollection = null;
 let redis = null;
 
 const REDIS_PREFIX = "clawmate:lobby:";
 const REDIS_IDS_KEY = "clawmate:lobby_ids";
+const REDIS_PROFILE_PREFIX = "clawmate:profile:";
 const MONGO_DB_NAME = "clawmate";
 const MONGO_COLLECTION = "lobbies";
+const MONGO_PROFILES_COLLECTION = "profiles";
 
 export async function initStore() {
   const mongoUri = process.env.MONGODB_URI;
@@ -51,6 +54,7 @@ export async function initStore() {
       await mongoClient.connect();
       const db = mongoClient.db(MONGO_DB_NAME);
       mongoCollection = db.collection(MONGO_COLLECTION);
+      mongoProfilesCollection = db.collection(MONGO_PROFILES_COLLECTION);
       storeMode = "mongo";
       log("MongoDB connected");
     } catch (e) {
@@ -244,4 +248,98 @@ export async function saveLobby(lobby) {
 /** For backward compatibility and cleanup; prefer loadLobbies. */
 export async function loadLobbiesFromRedis(lobbies, Chess) {
   return loadLobbies(lobbies, Chess);
+}
+
+// ---------- Profiles (wallet -> username for leaderboard) ----------
+
+/**
+ * Get username for a wallet from the store.
+ * @param {string} wallet - Address (lowercase recommended)
+ * @returns {Promise<string | null>}
+ */
+export async function getProfile(wallet) {
+  if (!wallet || typeof wallet !== "string") return null;
+  const w = wallet.toLowerCase();
+  if (storeMode === "mongo" && mongoProfilesCollection) {
+    try {
+      const doc = await mongoProfilesCollection.findOne({ wallet: w }, { projection: { username: 1 } });
+      return doc?.username ?? null;
+    } catch (e) {
+      console.warn("[store] getProfile (MongoDB) failed", e.message);
+      return null;
+    }
+  }
+  if (storeMode === "redis" && redis) {
+    try {
+      const raw = await redis.get(REDIS_PROFILE_PREFIX + w);
+      return raw ?? null;
+    } catch (e) {
+      console.warn("[store] getProfile (Redis) failed", e.message);
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Set username for a wallet. Persists when using MongoDB or Redis.
+ * @param {string} wallet - Address (lowercase recommended)
+ * @param {string} username - Display name
+ */
+export async function setProfile(wallet, username) {
+  if (!wallet || typeof wallet !== "string" || typeof username !== "string") return;
+  const w = wallet.toLowerCase();
+  const trimmed = username.trim();
+  if (storeMode === "mongo" && mongoProfilesCollection) {
+    try {
+      await mongoProfilesCollection.updateOne(
+        { wallet: w },
+        { $set: { wallet: w, username: trimmed, updatedAt: Date.now() } },
+        { upsert: true }
+      );
+    } catch (e) {
+      console.error("[store] setProfile (MongoDB) failed", e.message);
+    }
+    return;
+  }
+  if (storeMode === "redis" && redis) {
+    try {
+      await redis.set(REDIS_PROFILE_PREFIX + w, trimmed);
+    } catch (e) {
+      console.error("[store] setProfile (Redis) failed", e.message);
+    }
+  }
+}
+
+/**
+ * Load all wallet -> username pairs into the given Map. Used at server startup when using a store.
+ * @param {Map<string, string>} profilesMap - Map to fill (wallet lowercase -> username)
+ */
+export async function loadProfiles(profilesMap) {
+  if (!profilesMap || typeof profilesMap.set !== "function") return;
+  if (storeMode === "mongo" && mongoProfilesCollection) {
+    try {
+      const cursor = mongoProfilesCollection.find({}, { projection: { wallet: 1, username: 1 } });
+      for await (const doc of cursor) {
+        if (doc.wallet && doc.username) profilesMap.set(doc.wallet.toLowerCase(), doc.username);
+      }
+      log("Loaded profiles from MongoDB", { count: profilesMap.size });
+    } catch (e) {
+      console.error("[store] loadProfiles (MongoDB) failed", e.message);
+    }
+    return;
+  }
+  if (storeMode === "redis" && redis) {
+    try {
+      const keys = await redis.keys(REDIS_PROFILE_PREFIX + "*");
+      for (const key of keys) {
+        const wallet = key.slice(REDIS_PROFILE_PREFIX.length);
+        const username = await redis.get(key);
+        if (wallet && username) profilesMap.set(wallet.toLowerCase(), username);
+      }
+      log("Loaded profiles from Redis", { count: profilesMap.size });
+    } catch (e) {
+      console.error("[store] loadProfiles (Redis) failed", e.message);
+    }
+  }
 }

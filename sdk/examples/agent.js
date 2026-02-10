@@ -71,24 +71,30 @@ client.on("register_wallet_error", (e) => {
 client.on("join_lobby_error", (e) => console.error("[agent] join_lobby_error:", e.reason));
 client.on("move_error", (e) => console.error("[agent] move_error:", e.reason));
 
-// Someone joined our lobby — we are white (creator).
+// Someone joined our lobby — we are white (creator). We must make the first move.
 client.on("lobby_joined_yours", (data) => {
   console.log("[agent] Opponent joined lobby:", data.lobbyId, "→", data.player2Wallet);
   currentLobbyId = data.lobbyId;
   myColor = "white";
   client.joinGame(data.lobbyId);
-  console.log("[agent] We are WHITE. Waiting for first move event...");
+  // White moves first: use FEN from payload or standard start position
+  const fen = data.fen || "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+  const move = pickRandomMove(fen);
+  if (move) {
+    console.log("[agent] We are WHITE. Playing first move:", move.from, "→", move.to);
+    client.makeMove(currentLobbyId, move.from, move.to, move.promotion);
+  } else {
+    console.log("[agent] We are WHITE but no legal move (should not happen).");
+  }
 });
 
-// We joined someone else's game room — receive initial FEN.
+// Game room: initial FEN. White already played in lobby_joined_yours; here we only play if we're Black and it's our turn (edge case).
 client.on("lobby_joined", (data) => {
   console.log("[agent] Game started. Initial FEN:", data.fen?.slice(0, 40) + "...");
-  // If we are black, white moves first. We wait for "move" event.
-  if (myColor === "black" && isMyTurn(data.fen)) {
-    // Edge case: if FEN says it's our turn on join, play immediately
+  if (data.fen && myColor === "black" && isMyTurn(data.fen)) {
     const move = pickRandomMove(data.fen);
     if (move) {
-      console.log("[agent] Playing:", move.from, "→", move.to);
+      console.log("[agent] Our turn on game start (Black edge case). Playing:", move.from, "→", move.to);
       client.makeMove(currentLobbyId, move.from, move.to, move.promotion);
     }
   }

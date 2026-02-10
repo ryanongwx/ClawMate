@@ -44,6 +44,12 @@ function buildRegisterWalletMessage() {
   return `${DOMAIN} register wallet\nTimestamp: ${timestamp}`;
 }
 
+function buildSetUsernameMessage(username) {
+  const trimmed = typeof username === "string" ? username.trim() : "";
+  const timestamp = Date.now();
+  return `${DOMAIN} username: ${trimmed}\nTimestamp: ${timestamp}`;
+}
+
 /**
  * @param {import('ethers').Signer} signer
  * @param {{ betAmount: string, contractGameId?: number | null }} opts
@@ -85,6 +91,14 @@ export async function signTimeoutLobby(signer, lobbyId) {
 /** @param {import('ethers').Signer} signer */
 export async function signRegisterWallet(signer) {
   const message = buildRegisterWalletMessage();
+  const signature = await signMessage(signer, message);
+  return { message, signature };
+}
+
+/** @param {import('ethers').Signer} signer @param {string} username */
+export async function signSetUsername(signer, username) {
+  const trimmed = typeof username === "string" ? username.trim() : "";
+  const message = buildSetUsernameMessage(trimmed);
   const signature = await signMessage(signer, message);
   return { message, signature };
 }

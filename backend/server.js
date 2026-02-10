@@ -7,7 +7,8 @@ import rateLimit from "express-rate-limit";
 import { verifyMessage } from "ethers";
 import { v4 as uuidv4 } from "uuid";
 import { Chess } from "chess.js";
-import { initStore, loadLobbies, saveLobby, getLobbyFromStore, hydrateLobby, findWaitingLobbyByCreator } from "./store.js";
+import { initStore, loadLobbies, saveLobby, getLobbyFromStore, hydrateLobby, findWaitingLobbyByCreator, loadProfiles, getProfile, setProfile } from "./store.js";
+import { isProfane } from "./profanity.js";
 
 const ts = () => new Date().toISOString();
 const log = (msg, data = null) => {
@@ -42,6 +43,18 @@ function isSignatureFresh(message) {
   if (t == null) return false;
   const now = Date.now();
   return now - t <= SIGNATURE_TTL_MS && t <= now + 60000;
+}
+
+/** Extract username from set-username message. Format: "ClawMate username: {name}\nTimestamp: ..." */
+function extractUsernameFromMessage(message) {
+  if (!message || typeof message !== "string") return null;
+  const m = /username:\s*(.+?)\s*\nTimestamp:/s.exec(message);
+  return m ? m[1].trim() : null;
+}
+
+const USERNAME_REGEX = /^[a-zA-Z0-9_-]{3,20}$/;
+function isValidUsername(username) {
+  return typeof username === "string" && USERNAME_REGEX.test(username.trim());
 }
 
 const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -90,6 +103,8 @@ const PORT = process.env.PORT || 4000;
 // castling, en passant, promotion to Q/R/B/N; check/checkmate; stalemate; 50-move, threefold, insufficient material).
 // In-memory state: lobbyId -> { ..., drawOfferBy?: "white"|"black" (who offered draw; cleared on move/decline/withdraw) }
 const lobbies = new Map();
+/** wallet (lowercase) -> username for leaderboard; synced from store on startup, updated on set-username */
+const profiles = new Map();
 // socket.id -> lobbyId for leave_lobby
 const gameToLobby = new Map();
 // socket.id -> wallet (lowercase) for move/join_lobby auth
@@ -397,8 +412,22 @@ app.post("/api/lobbies/:lobbyId/join", async (req, res) => {
     return res.status(400).json({ error: "Cannot join lobby" });
   }
   lobby = lobbies.get(lobbyId);
-  io.to(lobbyId).emit("lobby_joined", { player2Wallet, fen: lobby.fen });
-  io.to(`wallet:${lobby.player1Wallet.toLowerCase()}`).emit("lobby_joined_yours", { lobbyId, player2Wallet, betAmount: lobby.betAmount });
+  const startPayload = {
+    player2Wallet,
+    fen: lobby.fen,
+    whiteTimeSec: lobby.whiteTimeSec ?? INITIAL_TIME_SEC,
+    blackTimeSec: lobby.blackTimeSec ?? INITIAL_TIME_SEC,
+  };
+  io.to(lobbyId).emit("lobby_joined", startPayload);
+  // Creator (White) may not be in room yet; send full game-start payload to wallet room so they can act immediately
+  io.to(`wallet:${lobby.player1Wallet.toLowerCase()}`).emit("lobby_joined_yours", {
+    lobbyId,
+    player2Wallet,
+    betAmount: lobby.betAmount,
+    fen: lobby.fen,
+    whiteTimeSec: lobby.whiteTimeSec ?? INITIAL_TIME_SEC,
+    blackTimeSec: lobby.blackTimeSec ?? INITIAL_TIME_SEC,
+  });
   res.json({ ok: true, fen: lobby.fen });
 });
 
@@ -534,6 +563,52 @@ app.get("/api/lobbies/:lobbyId/result", (req, res) => {
   res.json(payload);
 });
 
+// ---------- Profile (username for leaderboard) ----------
+// GET: public lookup by wallet. POST: set username (signed; profanity filtered).
+
+app.get("/api/profile/username", async (req, res) => {
+  const wallet = (req.query.wallet || "").trim();
+  if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
+    return res.status(400).json({ error: "Valid wallet query required" });
+  }
+  const w = wallet.toLowerCase();
+  let username = profiles.get(w) ?? null;
+  if (username == null) {
+    username = await getProfile(w);
+    if (username != null) profiles.set(w, username);
+  }
+  res.json({ username });
+});
+
+app.post("/api/profile/username", async (req, res) => {
+  const { message, signature, username: rawUsername } = req.body || {};
+  if (!message || !signature) {
+    return res.status(400).json({ error: "message and signature required" });
+  }
+  const wallet = recoverAddress(message, signature);
+  if (!wallet) {
+    return res.status(401).json({ error: "Invalid signature" });
+  }
+  if (!isSignatureFresh(message)) {
+    return res.status(401).json({ error: "Signature expired or invalid" });
+  }
+  const signedUsername = extractUsernameFromMessage(message);
+  const username = typeof rawUsername === "string" ? rawUsername.trim() : "";
+  if (signedUsername !== username) {
+    return res.status(400).json({ error: "Username in message must match request body" });
+  }
+  if (!isValidUsername(username)) {
+    return res.status(400).json({ error: "Username must be 3–20 characters, letters, numbers, underscore, or hyphen" });
+  }
+  if (isProfane(username)) {
+    return res.status(400).json({ error: "Username not allowed" });
+  }
+  profiles.set(wallet, username);
+  await setProfile(wallet, username);
+  log("Username set", { wallet, username });
+  res.json({ ok: true, username });
+});
+
 // Leaderboard: aggregate PnL, wins, losses, draws for all wallets that have played a finished game.
 app.get("/api/leaderboard", (req, res) => {
   const stats = {}; // wallet -> { wins, losses, draws, pnl }
@@ -561,7 +636,17 @@ app.get("/api/leaderboard", (req, res) => {
     }
   }
   const leaderboard = Object.values(stats)
-    .map((s) => ({ wallet: s.wallet, wins: s.wins, losses: s.losses, draws: s.draws, pnl: s.pnl.toString() }))
+    .map((s) => {
+      const w = (s.wallet || "").toLowerCase();
+      return {
+        wallet: s.wallet,
+        username: profiles.get(w) ?? null,
+        wins: s.wins,
+        losses: s.losses,
+        draws: s.draws,
+        pnl: s.pnl.toString(),
+      };
+    })
     .sort((a, b) => {
       const diff = BigInt(b.pnl) - BigInt(a.pnl);
       if (diff !== 0n) return diff > 0n ? 1 : -1;
@@ -869,6 +954,7 @@ function tickClocks() {
 async function start() {
   await initStore();
   await loadLobbies(lobbies, Chess);
+  await loadProfiles(profiles);
   setInterval(tickClocks, 1000);
   http.listen(PORT, "0.0.0.0", () => {
     log(`Server listening on 0.0.0.0:${PORT}`);

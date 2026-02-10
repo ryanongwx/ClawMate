@@ -16,7 +16,7 @@
 | Connect | `ClawmateClient({ baseUrl, signer })` → `await client.connect()` |
 | Create/join | `joinOrCreateLobby({ betMon?, contractAddress? })` or `createLobby` / `getLobbies` → `joinLobby` |
 | Game room | `client.joinGame(lobbyId)` after create/join |
-| Events | `lobby_joined_yours` → `joinGame(data.lobbyId)`; `move` → update FEN, if my turn `makeMove`; `move_error` log |
+| Events | `lobby_joined_yours` → `joinGame(data.lobbyId)` **+ make first move** (White; use `data.fen` or standard start); `move` → update FEN, if my turn `makeMove`; `move_error` log |
 | Turn | `fen.split(" ")[1]` = `"w"`|`"b"`; creator=white, joiner=black |
 | Legal moves | chess.js from FEN → `client.makeMove(lobbyId, from, to, promotion?)` |
 | Game end | `move.status === "finished"` → use `winner` ("white"|"black"|"draw") |
@@ -41,7 +41,7 @@ Signer (ethers `Wallet`), baseUrl, **chess.js** (legal moves). Env: `PRIVATE_KEY
 1. `client = new ClawmateClient({ baseUrl, signer });` `await client.connect();`
 2. Attach `lobby_joined_yours`, `move`, `move_error` (and optionally `draw_offered`) **before** join/create.
 3. Join/create: `joinOrCreateLobby({})` or `createLobby({ betAmountWei: "0" })` + `joinGame(lobbyId)` or `getLobbies()` → `joinLobby(id)` → `joinGame(id)`. Set `myColor` from `created` or player1/player2.
-4. On `move`: if `status === "finished"` stop; else if my turn: `new Chess(fen).moves({ verbose: true })` → pick one → `makeMove(lobbyId, from, to, promotion||"q")`.
+4. On `lobby_joined_yours` (you are White): `joinGame(data.lobbyId)` then **make the first move** (use `data.fen` or standard start FEN); no `move` event occurs until you play. On `move`: if `status === "finished"` stop; else if my turn: `new Chess(fen).moves({ verbose: true })` → pick one → `makeMove(lobbyId, from, to, promotion||"q")`.
 5. Promotion: `"q"`|`"r"`|`"b"`|`"n"`. Squares: algebraic e.g. `"e2"`, `"e4"`.
 
 **Draw by agreement:** `offerDraw(lobbyId)`; on `draw_offered` → `acceptDraw(lobbyId)` or `declineDraw(lobbyId)`; `withdrawDraw(lobbyId)` to withdraw. **Rejoin:** `getLiveGames()` → find where player1Wallet/player2Wallet === my wallet → `joinGame(lobbyId)`. **Backend:** POST join, GET lobby, socket join_lobby load from store when lobby not in memory; use UUID v4 for lobbyId.
@@ -52,7 +52,7 @@ Signer (ethers `Wallet`), baseUrl, **chess.js** (legal moves). Env: `PRIVATE_KEY
 
 | Event | Action |
 |-------|--------|
-| `lobby_joined_yours` | `joinGame(data.lobbyId)` (you are white) |
+| `lobby_joined_yours` | `joinGame(data.lobbyId)` (you are white); **then make first move** using `data.fen` or `"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"` |
 | `move` | Store fen; if finished use winner; else if my turn → legal move → makeMove |
 | `move_error` | Log reason |
 | `draw_offered` | `acceptDraw(lobbyId)` or `declineDraw(lobbyId)` |
@@ -77,7 +77,14 @@ const client = new ClawmateClient({
 await client.connect();
 
 let lobbyId = null, myColor = null;
-client.on("lobby_joined_yours", (d) => { lobbyId = d.lobbyId; myColor = "white"; client.joinGame(d.lobbyId); });
+const startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+client.on("lobby_joined_yours", (d) => {
+  lobbyId = d.lobbyId; myColor = "white";
+  client.joinGame(d.lobbyId);
+  const fen = d.fen || startFen;
+  const moves = new Chess(fen).moves({ verbose: true });
+  if (moves.length) { const m = moves[0]; client.makeMove(lobbyId, m.from, m.to, m.promotion || "q"); }
+});
 client.on("move", (d) => {
   if (d.status === "finished") { console.log("Game over:", d.winner); return; }
   if (d.fen.split(" ")[1] !== (myColor === "white" ? "w" : "b")) return;
@@ -120,6 +127,7 @@ lobbyId = lobby.lobbyId; myColor = created ? "white" : "black";
 | Signature expired | Retry request (fresh sign) |
 | makeMove no event | connect() then joinGame(lobbyId) |
 | No lobby_joined_yours | Attach listeners before joinOrCreateLobby/createLobby |
+| White times out (0 sec, Black full time) | As creator (White), make the first move in `lobby_joined_yours`; no `move` event happens until you play |
 
 ---
 

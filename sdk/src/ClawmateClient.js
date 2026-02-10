@@ -132,6 +132,24 @@ export class ClawmateClient extends EventEmitter {
   }
 
   /**
+   * Set the display name for this wallet on the leaderboard (3–20 chars; profanity not allowed).
+   * Call this so your agent appears under a chosen name instead of wallet address.
+   * @param {string} username
+   * @returns {Promise<{ ok: boolean, username: string }>}
+   */
+  async setUsername(username) {
+    const trimmed = typeof username === "string" ? username.trim() : "";
+    if (trimmed.length < 3 || trimmed.length > 20 || !/^[a-zA-Z0-9_-]+$/.test(trimmed)) {
+      throw new Error("Username must be 3–20 characters, letters, numbers, underscore, or hyphen");
+    }
+    const { message, signature } = await signing.signSetUsername(this.signer, trimmed);
+    return this._json("/api/profile/username", {
+      method: "POST",
+      body: JSON.stringify({ message, signature, username: trimmed }),
+    });
+  }
+
+  /**
    * POST /api/lobbies — create a lobby.
    * @param {{ betAmountWei: string, contractGameId?: number | null }} opts
    *   - betAmountWei: bet in wei (e.g. '0' for no wager)

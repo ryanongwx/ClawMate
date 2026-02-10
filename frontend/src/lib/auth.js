@@ -73,3 +73,14 @@ export async function signRegisterWallet() {
   const signature = await signMessage(message);
   return { message, signature };
 }
+
+/**
+ * Build and sign set-username message for leaderboard display name. Backend recovers wallet and stores username.
+ */
+export async function signSetUsername(username) {
+  const trimmed = typeof username === "string" ? username.trim() : "";
+  const timestamp = Date.now();
+  const message = `${DOMAIN} username: ${trimmed}\nTimestamp: ${timestamp}`;
+  const signature = await signMessage(message);
+  return { message, signature };
+}

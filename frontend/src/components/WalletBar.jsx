@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from "react";
+import { api } from "../lib/api";
+import { signSetUsername } from "../lib/auth";
 
 // Network config — defaults to Monad Mainnet (chain ID 143 / 0x8f).
 // Override with VITE_CHAIN_ID, VITE_RPC_URL, etc. at build time for testnet or other networks.
@@ -8,10 +10,16 @@ const CHAIN_NAME = import.meta.env.VITE_CHAIN_NAME || "Monad";
 const BLOCK_EXPLORER_URL = import.meta.env.VITE_BLOCK_EXPLORER_URL || "https://explorer.monad.xyz";
 
 const WALLET_STORAGE_KEY = "clawmate_wallet";
+const USERNAME_REGEX = /^[a-zA-Z0-9_-]{3,20}$/;
 
 export default function WalletBar({ wallet, setWallet }) {
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState(null);
+  const [myUsername, setMyUsername] = useState(null);
+  const [showSetName, setShowSetName] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const [nameError, setNameError] = useState(null);
+  const [savingName, setSavingName] = useState(false);
 
   // Restore wallet from localStorage on load (no popup; only reconnects if wallet is still unlocked/connected)
   useEffect(() => {
@@ -105,11 +113,62 @@ export default function WalletBar({ wallet, setWallet }) {
     }
   };
 
+  // Fetch username when wallet is set
+  useEffect(() => {
+    if (!wallet) {
+      setMyUsername(null);
+      return;
+    }
+    let cancelled = false;
+    const w = wallet.toLowerCase();
+    api(`/api/profile/username?wallet=${encodeURIComponent(w)}`)
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled) setMyUsername(d.username || null); })
+      .catch(() => { if (!cancelled) setMyUsername(null); });
+    return () => { cancelled = true; };
+  }, [wallet]);
+
   const disconnect = () => {
     setWallet(null);
+    setMyUsername(null);
+    setShowSetName(false);
     try {
       localStorage.removeItem(WALLET_STORAGE_KEY);
     } catch (_) {}
+  };
+
+  const openSetName = () => {
+    setNameInput(myUsername || "");
+    setNameError(null);
+    setShowSetName(true);
+  };
+
+  const saveUsername = async () => {
+    const trimmed = nameInput.trim();
+    if (!USERNAME_REGEX.test(trimmed)) {
+      setNameError("3–20 characters, letters, numbers, underscore, or hyphen");
+      return;
+    }
+    setSavingName(true);
+    setNameError(null);
+    try {
+      const { message, signature } = await signSetUsername(trimmed);
+      const res = await api("/api/profile/username", {
+        method: "POST",
+        body: JSON.stringify({ message, signature, username: trimmed }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setMyUsername(data.username || trimmed);
+        setShowSetName(false);
+      } else {
+        setNameError(data.error || "Failed to set name");
+      }
+    } catch (e) {
+      setNameError(e?.message || "Failed to set name");
+    } finally {
+      setSavingName(false);
+    }
   };
 
   return (
@@ -117,8 +176,36 @@ export default function WalletBar({ wallet, setWallet }) {
       {error && <span className="wallet-error">{error}</span>}
       {wallet ? (
         <>
-          <span className="wallet-addr">{wallet.slice(0, 6)}…{wallet.slice(-4)}</span>
+          <span className="wallet-addr" title={wallet}>
+            {myUsername || `${wallet.slice(0, 6)}…${wallet.slice(-4)}`}
+          </span>
+          <button type="button" className="btn btn-ghost wallet-set-name" onClick={openSetName} title="Set leaderboard name">
+            Set name
+          </button>
           <button type="button" className="btn btn-ghost" onClick={disconnect}>Disconnect</button>
+          {showSetName && (
+            <div className="wallet-name-modal" role="dialog" aria-label="Set leaderboard name">
+              <div className="wallet-name-modal-inner">
+                <label htmlFor="wallet-username-input">Leaderboard name</label>
+                <input
+                  id="wallet-username-input"
+                  type="text"
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  placeholder="3–20 characters"
+                  maxLength={20}
+                  autoFocus
+                />
+                {nameError && <p className="wallet-name-error">{nameError}</p>}
+                <div className="wallet-name-actions">
+                  <button type="button" className="btn btn-ghost" onClick={() => setShowSetName(false)}>Cancel</button>
+                  <button type="button" className="btn" onClick={saveUsername} disabled={savingName}>
+                    {savingName ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       ) : (
         <button type="button" className="btn" onClick={connect} disabled={connecting}>
