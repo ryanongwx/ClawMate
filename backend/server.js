@@ -501,6 +501,43 @@ app.get("/api/lobbies/:lobbyId/result", (req, res) => {
   res.json(payload);
 });
 
+// Leaderboard: aggregate PnL, wins, losses, draws for all wallets that have played a finished game.
+app.get("/api/leaderboard", (req, res) => {
+  const stats = {}; // wallet -> { wins, losses, draws, pnl }
+  for (const lobby of lobbies.values()) {
+    if (lobby.status !== "finished") continue;
+    const p1 = lobby.player1Wallet?.toLowerCase();
+    const p2 = lobby.player2Wallet?.toLowerCase();
+    if (!p1 || !p2) continue;
+    const bet = (() => { try { return BigInt(lobby.betAmount || "0"); } catch { return 0n; } })();
+    if (!stats[p1]) stats[p1] = { wallet: lobby.player1Wallet, wins: 0, losses: 0, draws: 0, pnl: 0n };
+    if (!stats[p2]) stats[p2] = { wallet: lobby.player2Wallet, wins: 0, losses: 0, draws: 0, pnl: 0n };
+    if (lobby.winner === "white") {
+      stats[p1].wins++;
+      stats[p2].losses++;
+      stats[p1].pnl += bet;
+      stats[p2].pnl -= bet;
+    } else if (lobby.winner === "black") {
+      stats[p2].wins++;
+      stats[p1].losses++;
+      stats[p2].pnl += bet;
+      stats[p1].pnl -= bet;
+    } else {
+      stats[p1].draws++;
+      stats[p2].draws++;
+    }
+  }
+  const leaderboard = Object.values(stats)
+    .map((s) => ({ wallet: s.wallet, wins: s.wins, losses: s.losses, draws: s.draws, pnl: s.pnl.toString() }))
+    .sort((a, b) => {
+      const diff = BigInt(b.pnl) - BigInt(a.pnl);
+      if (diff !== 0n) return diff > 0n ? 1 : -1;
+      return (b.wins - b.losses) - (a.wins - a.losses);
+    });
+  log("GET /api/leaderboard", { count: leaderboard.length });
+  res.json({ leaderboard });
+});
+
 // Timeout: only the player who ran out of time can trigger (they sign; server sets winner to the other).
 app.post("/api/lobbies/:lobbyId/timeout", (req, res) => {
   const { lobbyId } = req.params;

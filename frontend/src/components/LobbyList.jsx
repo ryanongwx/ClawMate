@@ -24,6 +24,7 @@ function getTurnCount(fen) {
 
 const TAB_OPEN = "open";
 const TAB_LIVE = "live";
+const TAB_LEADERBOARD = "leaderboard";
 
 export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLobby, onCreateClick, onSpectate, activeTab: activeTabProp, onTabChange }) {
   const [internalTab, setInternalTab] = useState(TAB_OPEN);
@@ -36,8 +37,10 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
   const [liveSearchWallet, setLiveSearchWallet] = useState("");
   const [lobbies, setLobbies] = useState([]);
   const [liveGames, setLiveGames] = useState([]);
+  const [leaderboard, setLeaderboard] = useState([]);
   const [loading, setLoading] = useState(true);
   const [liveLoading, setLiveLoading] = useState(true);
+  const [lbLoading, setLbLoading] = useState(true);
   const [joiningLobbyId, setJoiningLobbyId] = useState(null);
   const [joinError, setJoinError] = useState(null);
   const [cancellingLobbyId, setCancellingLobbyId] = useState(null);
@@ -72,6 +75,21 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
     };
     load();
     const t = setInterval(load, 3000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await api("/api/leaderboard");
+        const data = await res.json();
+        if (!cancelled) setLeaderboard(data.leaderboard || []);
+      } catch (_) {}
+      if (!cancelled) setLbLoading(false);
+    };
+    load();
+    const t = setInterval(load, 10000);
     return () => { cancelled = true; clearInterval(t); };
   }, []);
 
@@ -247,6 +265,15 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
           onClick={() => setActiveTab(TAB_LIVE)}
         >
           Live games
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === TAB_LEADERBOARD}
+          className={`lobby-tab ${activeTab === TAB_LEADERBOARD ? "active" : ""}`}
+          onClick={() => setActiveTab(TAB_LEADERBOARD)}
+        >
+          Leaderboard
         </button>
       </div>
 
@@ -461,6 +488,60 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
               </ul>
             );
           })()}
+        </div>
+      )}
+
+      {activeTab === TAB_LEADERBOARD && (
+        <div className="leaderboard-section">
+          <p className="lobby-live-subtitle">All-time standings by PnL</p>
+          {lbLoading ? (
+            <div className="lobby-empty">
+              <span className="lobby-empty-icon">⋯</span>
+              <p className="lobby-empty-title">Loading leaderboard</p>
+            </div>
+          ) : leaderboard.length === 0 ? (
+            <div className="lobby-empty">
+              <span className="lobby-empty-icon">🏆</span>
+              <p className="lobby-empty-title">No games finished yet</p>
+              <p className="lobby-empty-desc">Play a game and the leaderboard will appear here.</p>
+            </div>
+          ) : (
+            <div className="leaderboard-table-wrap">
+              <table className="leaderboard-table">
+                <thead>
+                  <tr>
+                    <th className="lb-rank">#</th>
+                    <th className="lb-wallet">Wallet</th>
+                    <th className="lb-pnl">PnL (MON)</th>
+                    <th className="lb-stat">Won</th>
+                    <th className="lb-stat">Lost</th>
+                    <th className="lb-stat">Drawn</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leaderboard.map((entry, i) => {
+                    const pnlMon = (() => { try { return formatEther(entry.pnl); } catch { return entry.pnl; } })();
+                    const pnlNum = parseFloat(pnlMon);
+                    const pnlClass = pnlNum > 0 ? "lb-positive" : pnlNum < 0 ? "lb-negative" : "";
+                    const isMe = wallet && entry.wallet?.toLowerCase() === wallet.toLowerCase();
+                    return (
+                      <tr key={entry.wallet} className={isMe ? "lb-row-me" : ""}>
+                        <td className="lb-rank">{i + 1}</td>
+                        <td className="lb-wallet" title={entry.wallet}>
+                          {entry.wallet ? `${entry.wallet.slice(0, 6)}…${entry.wallet.slice(-4)}` : "—"}
+                          {isMe && <span className="lb-you-badge">You</span>}
+                        </td>
+                        <td className={`lb-pnl ${pnlClass}`}>{pnlNum > 0 ? "+" : ""}{pnlMon}</td>
+                        <td className="lb-stat">{entry.wins}</td>
+                        <td className="lb-stat">{entry.losses}</td>
+                        <td className="lb-stat">{entry.draws}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </section>

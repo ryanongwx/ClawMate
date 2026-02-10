@@ -1106,6 +1106,119 @@ a.btn {
   margin-top: 4px;
 }
 
+/* Leaderboard */
+.leaderboard-section {
+  margin-top: 4px;
+}
+
+.leaderboard-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.leaderboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.leaderboard-table thead {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.leaderboard-table th {
+  padding: 14px 16px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.leaderboard-table td {
+  padding: 12px 16px;
+  color: var(--text);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  white-space: nowrap;
+}
+
+.leaderboard-table tbody tr {
+  transition: background 0.15s;
+}
+
+.leaderboard-table tbody tr:hover {
+  background: rgba(34, 211, 238, 0.05);
+}
+
+.leaderboard-table .lb-rank {
+  width: 48px;
+  text-align: center;
+  color: var(--text-dim);
+  font-weight: 700;
+}
+
+.leaderboard-table .lb-wallet {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.9rem;
+}
+
+.leaderboard-table .lb-pnl {
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 600;
+}
+
+.leaderboard-table .lb-positive {
+  color: #66ff88;
+}
+
+.leaderboard-table .lb-negative {
+  color: #ff6666;
+}
+
+.leaderboard-table .lb-stat {
+  text-align: center;
+  width: 64px;
+}
+
+.lb-row-me {
+  background: rgba(34, 211, 238, 0.08) !important;
+  border-left: 3px solid var(--accent-cyan);
+}
+
+.lb-you-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  border-radius: 4px;
+  background: rgba(34, 211, 238, 0.2);
+  color: var(--accent-cyan);
+  vertical-align: middle;
+}
+
+@media (max-width: 480px) {
+  .leaderboard-table th,
+  .leaderboard-table td {
+    padding: 10px 10px;
+    font-size: 0.85rem;
+  }
+  .leaderboard-table .lb-wallet {
+    font-size: 0.8rem;
+  }
+  .leaderboard-table .lb-rank {
+    width: 36px;
+  }
+  .leaderboard-table .lb-stat {
+    width: 48px;
+  }
+}
+
 .lobby-card-live .lobby-card-creator {
   font-size: 0.8rem;
 }
