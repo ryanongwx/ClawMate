@@ -3,6 +3,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Text, RoundedBox } from "@react-three/drei";
 import { Chess } from "chess.js";
 import * as THREE from "three";
+import { getCapturedPieces } from "./CapturedPieces";
 
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
@@ -366,6 +367,34 @@ function KingShape({ color }) {
 
 const PIECE_MAP = { p: PawnShape, r: RookShape, n: KnightShape, b: BishopShape, q: QueenShape, k: KingShape };
 
+/* -------------------------------------------------- 3D captured pieces columns (inside scene, beside board) */
+const CAPTURED_SCALE = 0.5;
+const CAPTURED_SPACING = 0.48;
+const CAPTURED_LEFT_X = -5.2;
+const CAPTURED_RIGHT_X = 5.2;
+
+function CapturedColumn3D({ pieces, side }) {
+  const x = side === "left" ? CAPTURED_LEFT_X : CAPTURED_RIGHT_X;
+  const pieceColor = side === "left" ? BLACK_PIECE : WHITE_PIECE;
+  const n = pieces.length;
+  if (n === 0) return null;
+  return (
+    <group>
+      {pieces.map((fenChar, i) => {
+        const type = fenChar.toLowerCase();
+        const ShapeComp = PIECE_MAP[type];
+        if (!ShapeComp) return null;
+        const z = (i - (n - 1) / 2) * CAPTURED_SPACING;
+        return (
+          <group key={`${side}-${i}-${fenChar}`} position={[x, 0, z]} scale={[CAPTURED_SCALE, CAPTURED_SCALE, CAPTURED_SCALE]}>
+            <ShapeComp color={pieceColor} />
+          </group>
+        );
+      })}
+    </group>
+  );
+}
+
 /* -------------------------------------------------- Animated piece wrapper */
 function AnimatedPiece({ piece, orientation, selected, isPossibleCapture, onClick }) {
   const ref = useRef();
@@ -539,6 +568,7 @@ function CameraRig({ disabled }) {
 function ChessScene({ fen, orientation, onMove, disabled, isTestGame }) {
   const safeFen = typeof fen === "string" && fen.length > 0 && fen !== "start" ? fen : START_FEN;
   const pieces = useMemo(() => fenToPieces(safeFen), [safeFen]);
+  const captured = useMemo(() => getCapturedPieces(safeFen), [safeFen]);
   const [selectedSquare, setSelectedSquare] = useState(null);
   const [possibleMoves, setPossibleMoves] = useState([]);
   const canMove = isTestGame || !disabled;
@@ -619,6 +649,10 @@ function ChessScene({ fen, orientation, onMove, disabled, isTestGame }) {
           onClick={handlePieceClick}
         />
       ))}
+
+      {/* 3D captured pieces: left = magenta (Blue's captures), right = cyan (Pink's captures) */}
+      <CapturedColumn3D pieces={captured.capturedByBlue} side="left" />
+      <CapturedColumn3D pieces={captured.capturedByPink} side="right" />
 
       {/* Effects */}
       <Particles />

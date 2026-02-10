@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { api } from "../lib/api";
 import ThreeChessBoard from "./ThreeChessBoard";
 import GameOverModal from "./GameOverModal";
-import CapturedPieces from "./CapturedPieces";
 
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
@@ -106,15 +105,15 @@ export default function SpectateView({ lobbyId, socket, onBack }) {
       </div>
 
       <div className="board-with-captured">
-        <CapturedPieces side="blue" fen={fen} />
-        <ThreeChessBoard
-          gameId={`spectate-${lobbyId}`}
-          fen={fen}
-          onMove={() => {}}
-          orientation="white"
-          disabled
-        />
-        <CapturedPieces side="pink" fen={fen} />
+        <div className="board-window">
+          <ThreeChessBoard
+            gameId={`spectate-${lobbyId}`}
+            fen={fen}
+            onMove={() => {}}
+            orientation="white"
+            disabled
+          />
+        </div>
       </div>
 
       {showGameOverModal && status === "finished" && (

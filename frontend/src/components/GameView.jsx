@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { Chess } from "chess.js";
 import { api } from "../lib/api";
 import { signConcedeLobby, signRegisterWallet } from "../lib/auth";
 import ThreeChessBoard from "./ThreeChessBoard";
 import GameOverModal from "./GameOverModal";
-import CapturedPieces from "./CapturedPieces";
 
 const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 const INITIAL_TIME_SEC = 10 * 60; // 10 minutes
@@ -69,6 +69,7 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
   }, [lobby, initialLobby]);
 
   useEffect(() => {
+    if (isTestGame) return;
     socket.emit("join_lobby", lobbyId);
     const onJoinError = () => {
       if (wallet) {
@@ -86,7 +87,7 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
       socket.emit("leave_lobby", lobbyId);
       timersInitialized.current = false;
     };
-  }, [lobbyId, socket, wallet]);
+  }, [lobbyId, socket, wallet, isTestGame]);
 
   useEffect(() => {
     if (status === "playing" && !timersInitialized.current) {
@@ -171,28 +172,27 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
   }, [socket]);
 
   useEffect(() => {
-    if (lobbyId && !lobby) {
-      api(`/api/lobbies/${lobbyId}`)
-        .then((r) => r.json())
-        .then((data) => {
-          setLobby(data);
-          const f = data.fen;
-          if (typeof f === "string" && f.length > 0) setFen(f);
-          if (data.status) setStatus(data.status);
-          if (data.winner != null) {
-            setWinner(data.winner);
-            setGameOverReason(data.winner === "draw" ? (data.drawReason || "draw") : "checkmate");
-            setShowGameOverModal(true);
-          }
-          if (data.status === "playing" && data.drawOfferBy != null) setDrawOfferBy(data.drawOfferBy);
-          if (data.status === "playing" && (data.whiteTimeSec != null || data.blackTimeSec != null)) {
-            if (data.whiteTimeSec != null) setWhiteTime(data.whiteTimeSec);
-            if (data.blackTimeSec != null) setBlackTime(data.blackTimeSec);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [lobbyId, lobby]);
+    if (isTestGame || !lobbyId || lobby) return;
+    api(`/api/lobbies/${lobbyId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setLobby(data);
+        const f = data.fen;
+        if (typeof f === "string" && f.length > 0) setFen(f);
+        if (data.status) setStatus(data.status);
+        if (data.winner != null) {
+          setWinner(data.winner);
+          setGameOverReason(data.winner === "draw" ? (data.drawReason || "draw") : "checkmate");
+          setShowGameOverModal(true);
+        }
+        if (data.status === "playing" && data.drawOfferBy != null) setDrawOfferBy(data.drawOfferBy);
+        if (data.status === "playing" && (data.whiteTimeSec != null || data.blackTimeSec != null)) {
+          if (data.whiteTimeSec != null) setWhiteTime(data.whiteTimeSec);
+          if (data.blackTimeSec != null) setBlackTime(data.blackTimeSec);
+        }
+      })
+      .catch(() => {});
+  }, [lobbyId, lobby, isTestGame]);
 
   // Local timer for display only; server is source of truth and auto-declares timeout.
   useEffect(() => {
@@ -227,6 +227,14 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
   }, [status, winner, fen]);
 
   const handleMove = (from, to, promotion) => {
+    if (isTestGame) {
+      try {
+        const chess = new Chess(fen);
+        const move = chess.move({ from, to, promotion: promotion || "q" });
+        if (move) setFen(chess.fen());
+      } catch (_) {}
+      return;
+    }
     socket.emit("move", { lobbyId, from, to, promotion: promotion || "q" });
   };
 
@@ -367,17 +375,17 @@ export default function GameView({ lobbyId, lobby: initialLobby, wallet, socket,
       </div>
 
       <div className="board-with-captured">
-        <CapturedPieces side="blue" fen={fen} />
-        <ThreeChessBoard
-          key={isTestGame ? "test" : "game"}
-          gameId={lobbyId}
-          fen={fen}
-          onMove={handleMove}
-          orientation={isBlack ? "black" : "white"}
-          disabled={!isTestGame && (!myTurn || status !== "playing")}
-          isTestGame={!!isTestGame}
-        />
-        <CapturedPieces side="pink" fen={fen} />
+        <div className="board-window">
+          <ThreeChessBoard
+            key={isTestGame ? "test" : "game"}
+            gameId={lobbyId}
+            fen={fen}
+            onMove={handleMove}
+            orientation={isBlack ? "black" : "white"}
+            disabled={!isTestGame && (!myTurn || status !== "playing")}
+            isTestGame={!!isTestGame}
+          />
+        </div>
       </div>
 
       {showGameOverModal && status === "finished" && (

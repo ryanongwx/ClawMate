@@ -31,6 +31,7 @@ body {
   height: 100vh;
   overflow: hidden;
   color: var(--text);
+  -webkit-tap-highlight-color: transparent;
 }
 
 body.clawgig-style,
@@ -170,11 +171,13 @@ h1, h2, h3 {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  overflow-x: hidden;
   max-width: 900px;
   margin: 0 auto;
   width: 100%;
   display: flex;
   flex-direction: column;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Landing view: main fills full width so horizon board can span edge-to-edge */
@@ -187,6 +190,14 @@ h1, h2, h3 {
 /* Lobby list (Open lobbies / Live games): use full width so 3-column grid fits */
 .main:has(.lobby-list) {
   max-width: 1280px;
+}
+
+/* Game and spectate views: full width so chess board window fills the screen */
+.main:has(.game-view),
+.main:has(.spectate-view) {
+  max-width: none;
+  margin: 0;
+  width: 100%;
 }
 
 .rejoin-banner {
@@ -1409,25 +1420,45 @@ a.btn {
 }
 
 .game-view .futuristic-board .board-container {
-  width: min(68vmin, calc((100vh - 200px) * 0.8));
-  height: min(68vmin, calc((100vh - 200px) * 0.8));
+  width: min(90vmin, calc(100vh - 220px));
+  height: min(90vmin, calc(100vh - 220px));
   max-width: 100%;
   max-height: 100%;
   aspect-ratio: 1;
 }
 
-/* Board with captured pieces: left (Blue's captures), board, right (Pink's captures) */
+@media (max-width: 480px) {
+  .game-view .futuristic-board .board-container {
+    width: min(95vmin, calc(100vh - 200px));
+    height: min(95vmin, calc(100vh - 200px));
+  }
+}
+
+/* Board with captured pieces: one window containing left (Blue's captures), board, right (Pink's captures) */
 .board-with-captured {
   flex: 1;
   min-height: 0;
   display: flex;
-  flex-direction: row;
   align-items: stretch;
-  gap: 12px;
   padding: 0 8px;
 }
 
-.board-with-captured .captured-pieces {
+/* Single 3D window: border/background wrap board + captured pieces inside */
+.board-window {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(34, 211, 238, 0.15);
+  box-shadow: 0 0 30px rgba(34, 211, 238, 0.12), inset 0 0 20px rgba(0, 0, 0, 0.4);
+  background: #060618;
+}
+
+.board-window .captured-pieces {
   flex-shrink: 0;
   width: 48px;
   display: flex;
@@ -1437,7 +1468,7 @@ a.btn {
   padding: 12px 0;
 }
 
-.board-with-captured .captured-pieces-inner {
+.board-window .captured-pieces-inner {
   display: flex;
   flex-direction: column;
   flex-wrap: wrap;
@@ -1446,25 +1477,28 @@ a.btn {
   max-height: 100%;
 }
 
-.board-with-captured .captured-piece {
+.board-window .captured-piece {
   font-size: 1.35rem;
   line-height: 1.1;
   opacity: 0.9;
 }
 
-.board-with-captured .captured-blue .captured-piece {
+.board-window .captured-blue .captured-piece {
   color: var(--accent-magenta);
   text-shadow: 0 0 8px var(--neon-pink-glow);
 }
 
-.board-with-captured .captured-pink .captured-piece {
+.board-window .captured-pink .captured-piece {
   color: var(--accent-cyan);
   text-shadow: 0 0 8px rgba(0, 212, 255, 0.5);
 }
 
-.board-with-captured .three-chess-container {
+.board-window .three-chess-container {
   flex: 1;
   min-width: 0;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
 }
 
 /* Three.js 3D chess board */
@@ -1618,4 +1652,346 @@ a.btn {
   margin: 0 0 20px;
   color: var(--text-dim);
   font-size: 0.95rem;
+}
+
+/* ========== Responsive: tablet and mobile ========== */
+
+@media (max-width: 768px) {
+  .app {
+    padding: 0 16px 16px;
+  }
+  .app:has(.main .landing) {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .header {
+    padding: 12px 16px;
+    margin: 0 -16px 0;
+    gap: 12px;
+  }
+  .header-logo {
+    font-size: 1.15rem;
+  }
+  .btn-nav {
+    padding: 10px 16px;
+    font-size: 0.85rem;
+    min-height: 44px;
+  }
+  .wallet-addr {
+    font-size: 0.8rem;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .landing.clawgig-style {
+    padding: 24px 16px 0;
+  }
+  .landing-title {
+    font-size: 2rem;
+    margin-bottom: 12px;
+  }
+  .landing-subtitle {
+    font-size: 1rem;
+    margin-bottom: 12px;
+  }
+  .landing-desc {
+    font-size: 0.9rem;
+    margin-bottom: 24px;
+  }
+  .landing-actions {
+    gap: 10px;
+  }
+  .btn-play,
+  .btn-rules,
+  a.btn.btn-rules {
+    padding: 12px 24px;
+    font-size: 0.95rem;
+    min-height: 44px;
+  }
+  .landing-cards {
+    gap: 16px;
+    padding: 0 16px;
+  }
+  .landing-card {
+    padding: 20px;
+  }
+  .landing-card h3 {
+    font-size: 1rem;
+  }
+  .landing-card p {
+    font-size: 0.85rem;
+  }
+  .modal {
+    max-width: 94vw;
+    max-height: 90vh;
+    padding: 20px;
+    margin: 12px;
+  }
+  .modal-overlay {
+    padding: 12px;
+    align-items: flex-start;
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+  .toast {
+    max-width: calc(100vw - 32px);
+    left: 16px;
+    right: 16px;
+    bottom: max(24px, env(safe-area-inset-bottom));
+  }
+  .toast-bottom-right {
+    right: 16px;
+    left: auto;
+  }
+  .rejoin-banner {
+    padding: 10px 16px;
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+  }
+  .rejoin-banner-actions {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .app {
+    padding: 0 12px 12px;
+  }
+  .header {
+    padding: 10px 12px;
+    margin: 0 -12px 0;
+    gap: 8px;
+  }
+  .header-logo {
+    font-size: 1rem;
+  }
+  .header-nav {
+    gap: 8px;
+  }
+  .btn-nav {
+    padding: 10px 14px;
+    font-size: 0.8rem;
+  }
+  .wallet-addr {
+    max-width: 72px;
+  }
+  .landing.clawgig-style {
+    padding: 20px 12px 0;
+  }
+  .landing-hero {
+    margin-bottom: 20px;
+  }
+  .landing-title {
+    font-size: 1.65rem;
+    margin-bottom: 8px;
+  }
+  .landing-subtitle {
+    font-size: 0.95rem;
+  }
+  .landing-desc {
+    font-size: 0.85rem;
+    margin-bottom: 20px;
+  }
+  .landing-actions {
+    flex-direction: column;
+    width: 100%;
+    max-width: 280px;
+    margin: 0 auto;
+  }
+  .landing-actions .btn-play,
+  .landing-actions .btn-rules,
+  .landing-actions a.btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .landing-cards {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 0 12px;
+  }
+  .landing-card {
+    padding: 16px;
+  }
+  .landing-horizon {
+    min-height: 80px;
+    margin-top: 20px;
+  }
+  /* Game view: stack turn tiles, compact meta */
+  .turn-and-timers {
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .turn-tile {
+    padding: 10px 12px;
+    min-height: 44px;
+  }
+  .turn-time {
+    font-size: 1.1rem;
+  }
+  .turn-label {
+    font-size: 0.9rem;
+  }
+  .turn-badge {
+    font-size: 0.7rem;
+    padding: 3px 6px;
+  }
+  .turn-addr {
+    font-size: 0.75rem;
+  }
+  .game-view .game-meta {
+    gap: 8px;
+    font-size: 0.8rem;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .game-view .btn-ghost {
+    margin-bottom: 12px;
+    min-height: 44px;
+    padding: 10px 16px;
+  }
+  .board-with-captured {
+    padding: 0 4px;
+  }
+  .board-window {
+    border-radius: 8px;
+  }
+  .game-meta .btn-offer-draw,
+  .game-meta .btn-draw-accept,
+  .game-meta .btn-ghost,
+  .game-meta .btn-concede {
+    min-height: 40px;
+    padding: 8px 12px;
+    font-size: 0.8rem;
+  }
+  .three-chess-hint {
+    font-size: 0.65rem;
+    bottom: 6px;
+  }
+  /* Lobby list */
+  .lobby-list.lobby-page {
+    padding: 16px 0 32px;
+  }
+  .lobby-tabs {
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .lobby-tab {
+    padding: 10px 16px;
+    font-size: 0.9rem;
+    min-height: 44px;
+  }
+  .lobby-card {
+    padding: 16px;
+    gap: 12px;
+  }
+  .lobby-card-body {
+    min-width: 0;
+  }
+  .lobby-card-bet {
+    font-size: 0.9rem;
+  }
+  .lobby-card-actions {
+    flex-wrap: wrap;
+  }
+  .btn-join,
+  .btn-spectate,
+  .btn-rejoin-lobby,
+  .btn-cancel-lobby {
+    min-height: 44px;
+    padding: 10px 18px;
+    font-size: 0.85rem;
+  }
+  /* Create lobby */
+  .create-lobby.create-lobby-page {
+    padding: 16px 0 32px;
+  }
+  .create-lobby-header {
+    margin-bottom: 20px;
+  }
+  .create-lobby-title {
+    font-size: 1.5rem;
+  }
+  .create-lobby-card {
+    padding: 24px 20px;
+  }
+  .create-lobby-input {
+    padding: 12px 14px;
+    font-size: 0.95rem;
+  }
+  .btn-create-lobby {
+    max-width: 100%;
+    min-height: 48px;
+  }
+  .btn-back {
+    min-height: 44px;
+  }
+  /* Modals */
+  .modal {
+    max-width: 100%;
+    margin: 8px;
+    padding: 16px;
+    border-radius: 12px;
+  }
+  .modal h2 {
+    font-size: 1.1rem;
+  }
+  .modal ul {
+    font-size: 0.9rem;
+  }
+  .rules-modal .btn,
+  .modal-actions .btn {
+    min-height: 44px;
+  }
+  .quick-start-modal .quick-start-code {
+    padding: 10px 12px;
+    font-size: 0.8rem;
+  }
+  .quick-start-modal .quick-start-steps {
+    font-size: 0.9rem;
+  }
+  .game-over-modal {
+    max-width: 100%;
+    padding: 20px;
+  }
+  .game-over-modal h2 {
+    font-size: 1.25rem;
+  }
+  .concede-confirm-modal h3,
+  .leave-confirm-modal h3 {
+    font-size: 1.1rem;
+  }
+}
+
+/* Touch-friendly: ensure tap targets on small screens */
+@media (max-width: 768px) {
+  .btn {
+    min-height: 44px;
+    padding: 10px 18px;
+  }
+  .btn-primary {
+    min-height: 44px;
+  }
+  a.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* Safe area insets for notched devices */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .app {
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
+  }
+  @media (max-width: 768px) {
+    .app {
+      padding-bottom: max(16px, env(safe-area-inset-bottom));
+    }
+  }
+  @media (max-width: 480px) {
+    .app {
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
+    }
+  }
 }
