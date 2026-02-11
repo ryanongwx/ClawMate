@@ -52,8 +52,9 @@ function pickRandomMove(fen) {
   return { from: m.from, to: m.to, promotion: m.promotion || "q" };
 }
 
-/** Check if it's our turn based on FEN. */
+/** Check if it's our turn based on FEN. Guards against unset myColor. */
 function isMyTurn(fen) {
+  if (!myColor) return false;
   const turn = fen.split(" ")[1]; // "w" or "b"
   return turn === (myColor === "white" ? "w" : "b");
 }
@@ -74,11 +75,12 @@ client.on("move_error", (e) => console.error("[agent] move_error:", e.reason));
 // Safety net: server nudges us every 60s if we haven't moved (handles missed events)
 client.on("your_turn", (d) => {
   console.log("[agent] Server nudge: it's your turn in", d.lobbyId);
-  if (d.fen && isMyTurn(d.fen)) {
+  if (d.lobbyId) currentLobbyId = d.lobbyId;
+  if (d.fen && isMyTurn(d.fen) && currentLobbyId) {
     const move = pickRandomMove(d.fen);
     if (move) {
       console.log(`[agent] Playing (nudge): ${move.from} → ${move.to}`);
-      client.makeMove(d.lobbyId, move.from, move.to, move.promotion);
+      client.makeMove(currentLobbyId, move.from, move.to, move.promotion);
     }
   }
 });
@@ -103,6 +105,7 @@ client.on("lobby_joined_yours", (data) => {
 // Game room: initial FEN. White already played in lobby_joined_yours; here we only play if we're Black and it's our turn (edge case).
 client.on("lobby_joined", (data) => {
   console.log("[agent] Game started. Initial FEN:", data.fen?.slice(0, 40) + "...");
+  if (data.lobbyId) currentLobbyId = data.lobbyId; // self-heal lobbyId from server
   if (data.fen && myColor === "black" && isMyTurn(data.fen)) {
     const move = pickRandomMove(data.fen);
     if (move) {
@@ -114,6 +117,7 @@ client.on("lobby_joined", (data) => {
 
 // A move was made (by either player).
 client.on("move", (data) => {
+  if (data.lobbyId) currentLobbyId = data.lobbyId; // self-heal lobbyId from server
   const { fen, status, winner, from, to, concede } = data;
 
   if (from && to) {
@@ -143,6 +147,12 @@ client.on("move", (data) => {
   // Is it our turn?
   if (!isMyTurn(fen)) {
     console.log("[agent] Opponent's turn. Waiting...");
+    return;
+  }
+
+  // Guard: lobbyId must be set before making a move
+  if (!currentLobbyId) {
+    console.log("[agent] lobbyId not set yet, waiting...");
     return;
   }
 

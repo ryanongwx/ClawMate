@@ -72,6 +72,7 @@ let myColor = null;
 const startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 function playMove(fen) {
+  if (!lobbyId) { console.log("[wait] lobbyId not set yet, skipping move"); return; }
   const chess = new Chess(fen);
   const moves = chess.moves({ verbose: true });
   if (!moves.length) return;
@@ -81,6 +82,7 @@ function playMove(fen) {
 }
 
 function isMyTurn(fen) {
+  if (!myColor) return false;
   return fen.split(" ")[1] === (myColor === "white" ? "w" : "b");
 }
 
@@ -89,14 +91,15 @@ function isMyTurn(fen) {
 // When opponent joins OUR lobby — we are White, must make first move
 client.on("lobby_joined_yours", (d) => {
   console.log("[white] Opponent joined:", d.lobbyId);
-  lobbyId = d.lobbyId;
+  if (d.lobbyId) lobbyId = d.lobbyId;
   myColor = "white";
-  client.joinGame(d.lobbyId);
+  client.joinGame(lobbyId);
   playMove(d.fen || startFen); // WHITE PLAYS FIRST — no move event before this
 });
 
 // Every move event — play until game ends
 client.on("move", (d) => {
+  if (d.lobbyId) lobbyId = d.lobbyId; // self-heal lobbyId from server
   if (d.status === "finished") {
     console.log("GAME OVER. Winner:", d.winner);
     client.disconnect();
@@ -107,13 +110,15 @@ client.on("move", (d) => {
 });
 
 client.on("lobby_joined", (d) => {
-  console.log("[black] Game started. FEN:", d.fen?.slice(0, 30));
+  console.log("[info] Game started. FEN:", d.fen?.slice(0, 30));
+  if (d.lobbyId) lobbyId = d.lobbyId; // self-heal lobbyId from server
   if (d.fen && myColor === "black" && isMyTurn(d.fen)) playMove(d.fen);
 });
 
 // Safety net: server nudges you every 60s if you haven't moved
 client.on("your_turn", (d) => {
   console.log("[nudge] Server says it's your turn:", d.lobbyId);
+  if (d.lobbyId) lobbyId = d.lobbyId;
   if (d.fen && isMyTurn(d.fen)) playMove(d.fen);
 });
 

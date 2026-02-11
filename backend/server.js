@@ -461,6 +461,7 @@ app.post("/api/lobbies/:lobbyId/join", async (req, res) => {
   }
   lobby = lobbies.get(lobbyId);
   const startPayload = {
+    lobbyId,
     player2Wallet,
     fen: lobby.fen,
     whiteTimeSec: lobby.whiteTimeSec ?? INITIAL_TIME_SEC,
@@ -581,7 +582,7 @@ app.post("/api/lobbies/:lobbyId/concede", async (req, res) => {
   lobby.winner = isP1 ? "black" : "white"; // other side wins
   saveLobby(lobby).catch(() => {});
   log("Game conceded", { lobbyId, winner: lobby.winner });
-  const concedePayload = { fen: lobby.fen, winner: lobby.winner, status: "finished", concede: true };
+  const concedePayload = { lobbyId, fen: lobby.fen, winner: lobby.winner, status: "finished", concede: true };
   io.to(lobbyId).emit("move", concedePayload);
   const cp1 = lobby.player1Wallet?.toLowerCase();
   const cp2 = lobby.player2Wallet?.toLowerCase();
@@ -740,7 +741,7 @@ app.post("/api/lobbies/:lobbyId/timeout", (req, res) => {
   lobby.winner = isP1 ? "black" : "white";
   saveLobby(lobby).catch(() => {});
   log("Game finished (timeout)", { lobbyId, winner: lobby.winner });
-  const timeoutPayload = { fen: lobby.fen, winner: lobby.winner, status: "finished" };
+  const timeoutPayload = { lobbyId, fen: lobby.fen, winner: lobby.winner, status: "finished" };
   io.to(lobbyId).emit("move", timeoutPayload);
   const tp1 = lobby.player1Wallet?.toLowerCase();
   const tp2 = lobby.player2Wallet?.toLowerCase();
@@ -856,6 +857,7 @@ io.on("connection", (socket) => {
       if (result.status === "finished" && lobby) resolveEscrowIfNeeded(lobby).catch(() => {});
       log("Socket move", { lobbyId, from, to: to || promotion, status: result.status, winner: result.winner ?? null });
       const movePayload = {
+        lobbyId,
         from: result.move.from,
         to: result.move.to,
         fen: result.fen,
@@ -937,7 +939,7 @@ io.on("connection", (socket) => {
     saveLobby(lobby).catch(() => {});
     resolveEscrowIfNeeded(lobby).catch(() => {});
     log("Draw accepted (agreement)", { lobbyId });
-    const drawPayload = { fen: lobby.fen, winner: "draw", status: "finished", reason: "agreement" };
+    const drawPayload = { lobbyId, fen: lobby.fen, winner: "draw", status: "finished", reason: "agreement" };
     io.to(lobbyId).emit("move", drawPayload);
     const dp1 = lobby.player1Wallet?.toLowerCase();
     const dp2 = lobby.player2Wallet?.toLowerCase();
@@ -1013,7 +1015,7 @@ function tickClocks() {
         lobby.whiteTimeSec = 0;
         saveLobby(lobby).catch(() => {});
         log("Game finished (timeout)", { lobbyId, winner: lobby.winner });
-        const payload = { fen: lobby.fen, winner: "black", status: "finished", whiteTimeSec: 0, blackTimeSec: blackSec, timeout: true };
+        const payload = { lobbyId, fen: lobby.fen, winner: "black", status: "finished", whiteTimeSec: 0, blackTimeSec: blackSec, timeout: true };
         io.to(lobbyId).emit("move", payload);
         const p1w = lobby.player1Wallet?.toLowerCase();
         const p2w = lobby.player2Wallet?.toLowerCase();
@@ -1029,7 +1031,7 @@ function tickClocks() {
         lobby.blackTimeSec = 0;
         saveLobby(lobby).catch(() => {});
         log("Game finished (timeout)", { lobbyId, winner: lobby.winner });
-        const payload = { fen: lobby.fen, winner: "white", status: "finished", whiteTimeSec: whiteSec, blackTimeSec: 0, timeout: true };
+        const payload = { lobbyId, fen: lobby.fen, winner: "white", status: "finished", whiteTimeSec: whiteSec, blackTimeSec: 0, timeout: true };
         io.to(lobbyId).emit("move", payload);
         const p1w = lobby.player1Wallet?.toLowerCase();
         const p2w = lobby.player2Wallet?.toLowerCase();
