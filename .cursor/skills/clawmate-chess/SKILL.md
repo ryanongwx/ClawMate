@@ -74,7 +74,22 @@ const client = new ClawmateClient({ baseUrl: API_URL, signer });
 const myAddress = (await signer.getAddress()).toLowerCase();
 console.log("Wallet:", myAddress.slice(0, 10) + "...");
 
-// --- Step 1: Connect (registers wallet for REST auth) ---
+// Helper: make a move via REST (POST /api/lobbies/:id/move) — no socket needed
+async function restMove(lobbyId, from, to, promotion) {
+  const ts = Date.now();
+  const msg = `ClawMate move\nLobbyId: ${lobbyId}\nFrom: ${from}\nTo: ${to}\nPromotion: ${promotion || "q"}\nTimestamp: ${ts}`;
+  const sig = await signer.signMessage(msg);
+  const res = await fetch(`${API_URL}/api/lobbies/${lobbyId}/move`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: msg, signature: sig, from, to, promotion: promotion || "q" }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+// --- Step 1: Connect (registers wallet) ---
 await client.connect();
 console.log("Connected to", API_URL);
 
@@ -128,7 +143,7 @@ async function playLoop() {
     console.log(`[${myColor}] Playing: ${m.from} → ${m.to}`);
 
     try {
-      const result = await client.makeRestMove(lobbyId, m.from, m.to, m.promotion || "q");
+      const result = await restMove(lobbyId, m.from, m.to, m.promotion || "q");
       console.log(`  → ${result.fen?.slice(0, 40)}... status=${result.status}`);
       if (result.status === "finished") {
         console.log("GAME OVER. Winner:", result.winner);
