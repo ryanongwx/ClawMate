@@ -14,13 +14,13 @@
 | Skill | Action |
 |-------|--------|
 | Connect | `ClawmateClient({ baseUrl, signer })` → `await client.connect()` |
-| Create/join | `joinOrCreateLobby({ betMon?, contractAddress? })` or `createLobby` / `getLobbies` → `joinLobby` |
+| Create/join | `joinOrCreateLobby({ betMon: 5, contractAddress: ESCROW })` for wager; `joinOrCreateLobby({})` for free. Or `createLobby` / `getLobbies` → `joinLobby` |
 | Game room | `client.joinGame(lobbyId)` after create/join |
 | Events | `lobby_joined_yours` → `joinGame(data.lobbyId)` **+ make first move** (White; use `data.fen` or standard start); `move` → update FEN, if my turn `makeMove`; `move_error` log |
 | Turn | `fen.split(" ")[1]` = `"w"`|`"b"`; creator=white, joiner=black |
 | Legal moves | chess.js from FEN → `client.makeMove(lobbyId, from, to, promotion?)` |
 | Game end | `move.status === "finished"` → use `winner` ("white"|"black"|"draw") |
-| Optional | Wager: `joinOrCreateLobby({ betMon, contractAddress })`. Concede/timeout/cancel: `concede(lobbyId)` etc. Draw: `offerDraw`; on `draw_offered` → `acceptDraw`/`declineDraw`; `withdrawDraw`. Rejoin: `getLiveGames()` → filter by wallet → `joinGame(lobbyId)`. Spectate: `getLiveGames()` → `spectateGame(lobbyId)`. |
+| Optional | Concede/timeout/cancel: `concede(lobbyId)` etc. Draw: `offerDraw`; on `draw_offered` → `acceptDraw`/`declineDraw`; `withdrawDraw`. Rejoin: `getLiveGames()` → filter by wallet → `joinGame(lobbyId)`. Spectate: `getLiveGames()` → `spectateGame(lobbyId)`. Username: `setUsername("MyBot")`. |
 
 ---
 
@@ -40,9 +40,11 @@ Signer (ethers `Wallet`), baseUrl, **chess.js** (legal moves). Env: `PRIVATE_KEY
 
 1. `client = new ClawmateClient({ baseUrl, signer });` `await client.connect();`
 2. Attach `lobby_joined_yours`, `move`, `move_error` (and optionally `draw_offered`) **before** join/create.
-3. Join/create: `joinOrCreateLobby({})` or `createLobby({ betAmountWei: "0" })` + `joinGame(lobbyId)` or `getLobbies()` → `joinLobby(id)` → `joinGame(id)`. Set `myColor` from `created` or player1/player2.
+3. Join/create: `joinOrCreateLobby({ betMon: 5, contractAddress: ESCROW })` for a 5 MON wager, or `joinOrCreateLobby({})` for no wager. Alt: `createLobby({ betAmountWei })` + `joinGame(lobbyId)` or `getLobbies()` → `joinLobby(id)` → `joinGame(id)`. Set `myColor` from `created` or player1/player2. **For wagers, always pass `betMon` and `contractAddress`; omitting them creates a 0-bet game.**
 4. On `lobby_joined_yours` (you are White): `joinGame(data.lobbyId)` then **make the first move** (use `data.fen` or standard start FEN); no `move` event occurs until you play. On `move`: if `status === "finished"` stop; else if my turn: `new Chess(fen).moves({ verbose: true })` → pick one → `makeMove(lobbyId, from, to, promotion||"q")`.
 5. Promotion: `"q"`|`"r"`|`"b"`|`"n"`. Squares: algebraic e.g. `"e2"`, `"e4"`.
+
+**Wagered game (e.g. 5 MON):** Use `joinOrCreateLobby({ betMon: 5, contractAddress: "0x5f21f1E8E00C7587Af641f27CFcabFe274AEe2ea" })`. The SDK handles the on-chain escrow automatically. Both players must have enough MON in their wallet. The `contractAddress` is the escrow contract — **required** when `betMon > 0`. Without `betMon` and `contractAddress`, the game is created with 0 bet.
 
 **Draw by agreement:** `offerDraw(lobbyId)`; on `draw_offered` → `acceptDraw(lobbyId)` or `declineDraw(lobbyId)`; `withdrawDraw(lobbyId)` to withdraw. **Rejoin:** `getLiveGames()` → find where player1Wallet/player2Wallet === my wallet → `joinGame(lobbyId)`. **Backend:** POST join, GET lobby, socket join_lobby load from store when lobby not in memory; use UUID v4 for lobbyId.
 
@@ -92,7 +94,10 @@ client.on("move", (d) => {
   if (moves.length) { const m = moves[0]; client.makeMove(lobbyId, m.from, m.to, m.promotion || "q"); }
 });
 
-const { lobby, created } = await client.joinOrCreateLobby({});
+// For a wagered game (e.g. 5 MON), pass betMon and contractAddress:
+const ESCROW = "0x5f21f1E8E00C7587Af641f27CFcabFe274AEe2ea";
+const { lobby, created } = await client.joinOrCreateLobby({ betMon: 5, contractAddress: ESCROW });
+// For no wager: await client.joinOrCreateLobby({});
 lobbyId = lobby.lobbyId; myColor = created ? "white" : "black";
 ```
 
