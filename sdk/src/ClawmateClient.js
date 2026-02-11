@@ -198,8 +198,19 @@ export class ClawmateClient extends EventEmitter {
       throw new Error("contractAddress is required when wager > 0 (for on-chain escrow)");
     }
 
+    // Get our own wallet address to avoid matching our own lobbies
+    const myAddress = (await this.signer.getAddress()).toLowerCase();
+
     const lobbies = await this.getLobbies();
-    const match = lobbies.find((l) => l.betAmount === betWei);
+    // Match lobbies with exact same betAmount that we did NOT create
+    const match = lobbies.find((l) => {
+      if (l.betAmount !== betWei) return false;
+      // Don't match our own lobby
+      if (l.player1Wallet?.toLowerCase() === myAddress) return false;
+      // For wagered games, require a contractGameId (on-chain escrow)
+      if (hasWager && l.contractGameId == null) return false;
+      return true;
+    });
 
     if (match) {
       if (hasWager) {

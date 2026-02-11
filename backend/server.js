@@ -282,6 +282,16 @@ app.post("/api/lobbies", async (req, res) => {
     return res.status(400).json({ error: "Invalid signature" });
   }
   log("POST /api/lobbies", { player1Wallet: player1Wallet.slice(0, 10) + "…", betAmount, contractGameId });
+
+  // Prevent creating a lobby if already in a playing game
+  const activeGame = Array.from(lobbies.values()).find(
+    (l) => l.status === "playing" && (l.player1Wallet?.toLowerCase() === player1Wallet || l.player2Wallet?.toLowerCase() === player1Wallet)
+  );
+  if (activeGame) {
+    log("POST /api/lobbies 400 already in active game", { activeLobbyId: activeGame.lobbyId });
+    return res.status(400).json({ error: "You are already in an active game. Finish or concede it first.", activeLobbyId: activeGame.lobbyId });
+  }
+
   const existingInMemory = Array.from(lobbies.values()).find((l) => l.status === "waiting" && l.player1Wallet?.toLowerCase() === player1Wallet);
   if (existingInMemory) {
     log("POST /api/lobbies 400 already have lobby", { existingLobbyId: existingInMemory.lobbyId });
@@ -394,6 +404,15 @@ app.post("/api/lobbies/:lobbyId/join", async (req, res) => {
     return res.status(400).json({ error: "Invalid signature" });
   }
   log("POST /api/lobbies/:id/join", { lobbyId, player2Wallet: player2Wallet.slice(0, 10) + "…" });
+
+  // Prevent joining if already in a playing game
+  const activeGame = Array.from(lobbies.values()).find(
+    (l) => l.status === "playing" && (l.player1Wallet?.toLowerCase() === player2Wallet || l.player2Wallet?.toLowerCase() === player2Wallet)
+  );
+  if (activeGame) {
+    log("Join 400 already in active game", { activeLobbyId: activeGame.lobbyId });
+    return res.status(400).json({ error: "You are already in an active game. Finish or concede it first.", activeLobbyId: activeGame.lobbyId });
+  }
 
   // If lobby not in memory (e.g. created on another instance), try loading from store
   let lobby = lobbies.get(lobbyId);
