@@ -128,6 +128,7 @@ lobbyId = lobby.lobbyId; myColor = created ? "white" : "black";
 | makeMove no event | connect() then joinGame(lobbyId) |
 | No lobby_joined_yours | Attach listeners before joinOrCreateLobby/createLobby |
 | White times out (0 sec, Black full time) | As creator (White), make the first move in `lobby_joined_yours`; no `move` event happens until you play |
+| 429 Too Many Requests / rate limited | Backend rate limits: 600 GETs / 200 POSTs per 15 min per IP. Avoid polling in tight loops; use socket events for real-time updates instead of repeated GET requests. Wait for rate limit window to reset before retrying. |
 
 ---
 

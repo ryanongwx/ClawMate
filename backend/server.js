@@ -78,14 +78,27 @@ const io = new Server(http, {
 app.use(cors({ origin: process.env.FRONTEND_URL || "http://localhost:5173" }));
 app.use(express.json({ limit: "50kb" }));
 
-// Rate limiting: 100 requests per 15 min per IP for API
-const apiLimiter = rateLimit({
+// Rate limiting: separate limits for read (GET) and write (POST/PUT/DELETE) API requests.
+// Read endpoints (lobbies list, leaderboard, health, status) are high-traffic and safe — allow more.
+// Write endpoints (create, join, cancel, concede, timeout, set username) are sensitive — tighter limit.
+const readLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 600,
   standardHeaders: true,
   legacyHeaders: false,
 });
-app.use("/api/", apiLimiter);
+const writeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use("/api/", (req, res, next) => {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") {
+    return readLimiter(req, res, next);
+  }
+  return writeLimiter(req, res, next);
+});
 
 // Log every request (method, path, status, duration)
 app.use((req, res, next) => {
