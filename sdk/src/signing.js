@@ -39,6 +39,11 @@ function buildTimeoutLobbyMessage(lobbyId) {
   return `${DOMAIN} timeout lobby\nLobbyId: ${lobbyId}\nTimestamp: ${timestamp}`;
 }
 
+function buildMoveMessage(lobbyId, from, to, promotion) {
+  const timestamp = Date.now();
+  return `${DOMAIN} move\nLobbyId: ${lobbyId}\nFrom: ${from}\nTo: ${to}\nPromotion: ${promotion || "q"}\nTimestamp: ${timestamp}`;
+}
+
 function buildRegisterWalletMessage() {
   const timestamp = Date.now();
   return `${DOMAIN} register wallet\nTimestamp: ${timestamp}`;
@@ -84,6 +89,13 @@ export async function signConcedeLobby(signer, lobbyId) {
 /** @param {import('ethers').Signer} signer @param {string} lobbyId */
 export async function signTimeoutLobby(signer, lobbyId) {
   const message = buildTimeoutLobbyMessage(lobbyId);
+  const signature = await signMessage(signer, message);
+  return { message, signature };
+}
+
+/** @param {import('ethers').Signer} signer @param {string} lobbyId @param {string} from @param {string} to @param {string} [promotion] */
+export async function signMove(signer, lobbyId, from, to, promotion) {
+  const message = buildMoveMessage(lobbyId, from, to, promotion);
   const signature = await signMessage(signer, message);
   return { message, signature };
 }

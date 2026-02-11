@@ -751,6 +751,93 @@ app.post("/api/lobbies/:lobbyId/timeout", (req, res) => {
   res.json({ ok: true, status: "finished", winner: lobby.winner });
 });
 
+// REST-based move: allows agents to make moves without a persistent Socket.IO connection.
+// Authenticated via signed message (same as other endpoints). Emits move events via socket for spectators/opponent.
+app.post("/api/lobbies/:lobbyId/move", async (req, res) => {
+  const { lobbyId } = req.params;
+  if (!isValidLobbyId(lobbyId)) {
+    return res.status(400).json({ error: "Invalid lobby id" });
+  }
+  const { message, signature, from, to, promotion } = req.body || {};
+  if (!message || !signature) {
+    return res.status(400).json({ error: "message and signature required" });
+  }
+  if (!from || !to) {
+    return res.status(400).json({ error: "from and to squares required" });
+  }
+  if (!isSignatureFresh(message)) {
+    return res.status(400).json({ error: "Signature expired or invalid timestamp" });
+  }
+  const playerWallet = recoverAddress(message, signature);
+  if (!playerWallet) {
+    return res.status(400).json({ error: "Invalid signature" });
+  }
+
+  // Load lobby from memory or store
+  let lobby = lobbies.get(lobbyId);
+  if (!lobby) {
+    const data = await getLobbyFromStore(lobbyId);
+    if (data) {
+      lobby = hydrateLobby(data, Chess);
+      lobbies.set(lobbyId, lobby);
+      log("REST move: loaded lobby from store", { lobbyId });
+    }
+  }
+  if (!lobby) {
+    return res.status(404).json({ error: "Lobby not found" });
+  }
+  if (lobby.status !== "playing") {
+    return res.status(400).json({ error: "Game not in progress", status: lobby.status, winner: lobby.winner });
+  }
+
+  // Verify it's this player's turn
+  const turn = (lobby.fen || "").split(" ")[1] || "w";
+  const currentPlayerWallet = turn === "w" ? lobby.player1Wallet?.toLowerCase() : lobby.player2Wallet?.toLowerCase();
+  if (playerWallet !== currentPlayerWallet) {
+    return res.status(400).json({ error: "not_your_turn", fen: lobby.fen, turn });
+  }
+
+  const result = applyMove(lobbyId, from, to, promotion || "q");
+  if (!result.ok) {
+    return res.status(400).json({ error: result.reason });
+  }
+
+  log("REST move", { lobbyId, from, to, status: result.status, winner: result.winner ?? null });
+
+  // Emit move events via socket for spectators and other player
+  const movePayload = {
+    lobbyId,
+    from: result.move.from,
+    to: result.move.to,
+    fen: result.fen,
+    winner: result.winner,
+    status: result.status,
+    ...(result.winner === "draw" && result.drawReason ? { reason: result.drawReason } : {}),
+    ...(result.whiteTimeSec != null || result.blackTimeSec != null ? { whiteTimeSec: result.whiteTimeSec, blackTimeSec: result.blackTimeSec } : {}),
+  };
+  io.to(lobbyId).emit("move", movePayload);
+  const p1w = lobby.player1Wallet?.toLowerCase();
+  const p2w = lobby.player2Wallet?.toLowerCase();
+  if (p1w) io.to(`wallet:${p1w}`).emit("move", movePayload);
+  if (p2w) io.to(`wallet:${p2w}`).emit("move", movePayload);
+
+  if (result.status === "finished") {
+    resolveEscrowIfNeeded(lobby).catch(() => {});
+  }
+
+  res.json({
+    ok: true,
+    lobbyId,
+    from: result.move.from,
+    to: result.move.to,
+    fen: result.fen,
+    status: result.status,
+    winner: result.winner ?? null,
+    whiteTimeSec: result.whiteTimeSec,
+    blackTimeSec: result.blackTimeSec,
+  });
+});
+
 // Socket.io: real-time moves (wallet-bound auth)
 io.on("connection", (socket) => {
   log("Socket connected", { socketId: socket.id });

@@ -304,6 +304,23 @@ export class ClawmateClient extends EventEmitter {
   }
 
   /**
+   * Make a move via REST (no socket connection needed). Stateless, authenticated via signature.
+   * Use this when persistent Socket.IO connections are not feasible (e.g. short-lived agent processes).
+   * @param {string} lobbyId
+   * @param {string} from - source square (e.g. "e2")
+   * @param {string} to - target square (e.g. "e4")
+   * @param {string} [promotion="q"] - promotion piece
+   * @returns {Promise<{ ok: boolean, lobbyId: string, from: string, to: string, fen: string, status: string, winner: string|null }>}
+   */
+  async makeRestMove(lobbyId, from, to, promotion = "q") {
+    const { message, signature } = await signing.signMove(this.signer, lobbyId, from, to, promotion || "q");
+    return this._json(`/api/lobbies/${lobbyId}/move`, {
+      method: "POST",
+      body: JSON.stringify({ message, signature, from, to, promotion: promotion || "q" }),
+    });
+  }
+
+  /**
    * Offer a draw (real-time). Opponent will receive "draw_offered" with { by: "white"|"black" }.
    * @param {string} lobbyId
    */
