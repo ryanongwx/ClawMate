@@ -129,6 +129,8 @@ lobbyId = lobby.lobbyId; myColor = created ? "white" : "black";
 | No lobby_joined_yours | Attach listeners before joinOrCreateLobby/createLobby |
 | White times out (0 sec, Black full time) | As creator (White), make the first move in `lobby_joined_yours`; no `move` event happens until you play |
 | 429 Too Many Requests / rate limited | Backend rate limits: 600 GETs / 200 POSTs per 15 min per IP. Avoid polling in tight loops; use socket events for real-time updates instead of repeated GET requests. Wait for rate limit window to reset before retrying. |
+| Move events not received | Move events are sent to both the lobbyId room AND wallet rooms. Ensure you called `connect()` (registers wallet room) and `joinGame(lobbyId)` (joins lobby room). Both channels deliver move events as a fallback. |
+| Stuck waiting lobby blocks create | Stale lobbies auto-cancel after 30 min. Cancel explicitly with `cancelLobby(lobbyId)`, or wait for auto-cleanup. Don't retry lobby creation in a tight loop. |
 
 ---
 

@@ -546,7 +546,12 @@ app.post("/api/lobbies/:lobbyId/concede", async (req, res) => {
   lobby.winner = isP1 ? "black" : "white"; // other side wins
   saveLobby(lobby).catch(() => {});
   log("Game conceded", { lobbyId, winner: lobby.winner });
-  io.to(lobbyId).emit("move", { fen: lobby.fen, winner: lobby.winner, status: "finished", concede: true });
+  const concedePayload = { fen: lobby.fen, winner: lobby.winner, status: "finished", concede: true };
+  io.to(lobbyId).emit("move", concedePayload);
+  const cp1 = lobby.player1Wallet?.toLowerCase();
+  const cp2 = lobby.player2Wallet?.toLowerCase();
+  if (cp1) io.to(`wallet:${cp1}`).emit("move", concedePayload);
+  if (cp2) io.to(`wallet:${cp2}`).emit("move", concedePayload);
   resolveEscrowIfNeeded(lobby).catch(() => {});
   res.json({ ok: true, status: "finished", winner: lobby.winner });
 });
@@ -700,7 +705,12 @@ app.post("/api/lobbies/:lobbyId/timeout", (req, res) => {
   lobby.winner = isP1 ? "black" : "white";
   saveLobby(lobby).catch(() => {});
   log("Game finished (timeout)", { lobbyId, winner: lobby.winner });
-  io.to(lobbyId).emit("move", { fen: lobby.fen, winner: lobby.winner, status: "finished" });
+  const timeoutPayload = { fen: lobby.fen, winner: lobby.winner, status: "finished" };
+  io.to(lobbyId).emit("move", timeoutPayload);
+  const tp1 = lobby.player1Wallet?.toLowerCase();
+  const tp2 = lobby.player2Wallet?.toLowerCase();
+  if (tp1) io.to(`wallet:${tp1}`).emit("move", timeoutPayload);
+  if (tp2) io.to(`wallet:${tp2}`).emit("move", timeoutPayload);
   resolveEscrowIfNeeded(lobby).catch(() => {});
   res.json({ ok: true, status: "finished", winner: lobby.winner });
 });
@@ -810,7 +820,7 @@ io.on("connection", (socket) => {
       saveLobby(lobby).catch(() => {});
       if (result.status === "finished" && lobby) resolveEscrowIfNeeded(lobby).catch(() => {});
       log("Socket move", { lobbyId, from, to: to || promotion, status: result.status, winner: result.winner ?? null });
-      io.to(lobbyId).emit("move", {
+      const movePayload = {
         from: result.move.from,
         to: result.move.to,
         fen: result.fen,
@@ -818,7 +828,13 @@ io.on("connection", (socket) => {
         status: result.status,
         ...(result.winner === "draw" && result.drawReason ? { reason: result.drawReason } : {}),
         ...(result.whiteTimeSec != null || result.blackTimeSec != null ? { whiteTimeSec: result.whiteTimeSec, blackTimeSec: result.blackTimeSec } : {}),
-      });
+      };
+      // Emit to lobby room (primary) + both wallet rooms (fallback so players don't miss events if not in room)
+      io.to(lobbyId).emit("move", movePayload);
+      const p1w = lobby.player1Wallet?.toLowerCase();
+      const p2w = lobby.player2Wallet?.toLowerCase();
+      if (p1w) io.to(`wallet:${p1w}`).emit("move", movePayload);
+      if (p2w) io.to(`wallet:${p2w}`).emit("move", movePayload);
     } else {
       log("Socket move rejected", { lobbyId, from, to, reason: result.reason });
       socket.emit("move_error", { reason: result.reason });
@@ -886,12 +902,12 @@ io.on("connection", (socket) => {
     saveLobby(lobby).catch(() => {});
     resolveEscrowIfNeeded(lobby).catch(() => {});
     log("Draw accepted (agreement)", { lobbyId });
-    io.to(lobbyId).emit("move", {
-      fen: lobby.fen,
-      winner: "draw",
-      status: "finished",
-      reason: "agreement",
-    });
+    const drawPayload = { fen: lobby.fen, winner: "draw", status: "finished", reason: "agreement" };
+    io.to(lobbyId).emit("move", drawPayload);
+    const dp1 = lobby.player1Wallet?.toLowerCase();
+    const dp2 = lobby.player2Wallet?.toLowerCase();
+    if (dp1) io.to(`wallet:${dp1}`).emit("move", drawPayload);
+    if (dp2) io.to(`wallet:${dp2}`).emit("move", drawPayload);
   });
 
   socket.on("decline_draw", (lobbyId) => {
@@ -946,7 +962,12 @@ function tickClocks() {
         lobby.whiteTimeSec = 0;
         saveLobby(lobby).catch(() => {});
         log("Game finished (timeout)", { lobbyId, winner: lobby.winner });
-        io.to(lobbyId).emit("move", { fen: lobby.fen, winner: "black", status: "finished", whiteTimeSec: 0, blackTimeSec: blackSec, timeout: true });
+        const payload = { fen: lobby.fen, winner: "black", status: "finished", whiteTimeSec: 0, blackTimeSec: blackSec, timeout: true };
+        io.to(lobbyId).emit("move", payload);
+        const p1w = lobby.player1Wallet?.toLowerCase();
+        const p2w = lobby.player2Wallet?.toLowerCase();
+        if (p1w) io.to(`wallet:${p1w}`).emit("move", payload);
+        if (p2w) io.to(`wallet:${p2w}`).emit("move", payload);
         resolveEscrowIfNeeded(lobby).catch(() => {});
       }
     } else {
@@ -957,9 +978,29 @@ function tickClocks() {
         lobby.blackTimeSec = 0;
         saveLobby(lobby).catch(() => {});
         log("Game finished (timeout)", { lobbyId, winner: lobby.winner });
-        io.to(lobbyId).emit("move", { fen: lobby.fen, winner: "white", status: "finished", whiteTimeSec: whiteSec, blackTimeSec: 0, timeout: true });
+        const payload = { fen: lobby.fen, winner: "white", status: "finished", whiteTimeSec: whiteSec, blackTimeSec: 0, timeout: true };
+        io.to(lobbyId).emit("move", payload);
+        const p1w = lobby.player1Wallet?.toLowerCase();
+        const p2w = lobby.player2Wallet?.toLowerCase();
+        if (p1w) io.to(`wallet:${p1w}`).emit("move", payload);
+        if (p2w) io.to(`wallet:${p2w}`).emit("move", payload);
         resolveEscrowIfNeeded(lobby).catch(() => {});
       }
+    }
+  }
+}
+
+// Auto-cancel stale waiting lobbies (no opponent joined within STALE_LOBBY_TTL_MS).
+const STALE_LOBBY_TTL_MS = 30 * 60 * 1000; // 30 minutes
+function cleanupStaleLobbies() {
+  const now = Date.now();
+  for (const [lobbyId, lobby] of lobbies.entries()) {
+    if (lobby.status !== "waiting") continue;
+    const age = now - (lobby.createdAt ?? now);
+    if (age > STALE_LOBBY_TTL_MS) {
+      lobby.status = "cancelled";
+      saveLobby(lobby).catch(() => {});
+      log("Auto-cancelled stale lobby", { lobbyId, ageMin: Math.round(age / 60000) });
     }
   }
 }
@@ -969,6 +1010,8 @@ async function start() {
   await loadLobbies(lobbies, Chess);
   await loadProfiles(profiles);
   setInterval(tickClocks, 1000);
+  setInterval(cleanupStaleLobbies, 60 * 1000); // check every minute
+  cleanupStaleLobbies(); // run once on startup
   http.listen(PORT, "0.0.0.0", () => {
     log(`Server listening on 0.0.0.0:${PORT}`);
     log("Escrow resolver", { enabled: !!escrowContract });
