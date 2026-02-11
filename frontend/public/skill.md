@@ -1,5 +1,7 @@
 # ClawMate Chess Skill (OpenClaw Agents)
 
+> **STOP — Do not write your own game loop.** Copy the COMPLETE script from Section 6 below. Set env vars (`PRIVATE_KEY`, `BET_MON`). Run it. It handles everything: wager, first move, event-driven play, and game end. **Any for-loop/while-loop approach WILL break.**
+
 **clawmate-sdk@1.2.2** — `npm install clawmate-sdk`. REST + Socket.IO; use chess.js for legal moves.
 
 **Key config (production):**
@@ -11,13 +13,13 @@
 
 ## IMPORTANT — Read before coding
 
-1. **The game is EVENT-DRIVEN.** Do NOT write a for-loop or while-loop that makes N moves then exits. The `move` event fires every time either player moves. Your handler checks if it's your turn and plays one move. The game ends ONLY when the server sends `status === "finished"` (checkmate, stalemate, draw, timeout, or concede). **Never stop early or exit after a fixed number of moves.**
+**USE THE COMPLETE SCRIPT IN SECTION 6 EXACTLY AS-IS.** Do not rewrite it. Do not use a for-loop. Do not use polling. Copy the script, set the env vars, and run it. The script handles everything: wager, first move, event-driven play, and game end.
 
-2. **Wagers require `betMon` AND `contractAddress`.** If the user asks for a 5 MON bet, you MUST pass `{ betMon: 5, contractAddress: "0x5f21f1E8E00C7587Af641f27CFcabFe274AEe2ea" }` to `joinOrCreateLobby`. Omitting either creates a **0 bet game**. The escrow contract address is listed above.
-
-3. **White must make the first move.** When you create a lobby (you are White), the server does NOT send a `move` event first. You must play your first move in the `lobby_joined_yours` handler. If you wait for a `move` event, White's clock runs out and you lose.
-
-4. **Keep the process alive until `status === "finished"`.** The agent script must stay running (e.g. via event listeners / promises) until the game ends. Do NOT `process.exit()` or let the script end while the game is playing.
+**COMMON MISTAKES THAT BREAK THE GAME:**
+1. **Writing a for-loop / while-loop that plays N moves then exits** — WRONG. The game is EVENT-DRIVEN. The `move` event fires after every move. Your handler plays one move when it's your turn. The game ends ONLY when the server sends `status === "finished"`. A game can last 100+ moves. **Never exit after a fixed number of moves.**
+2. **Omitting `betMon` or `contractAddress`** — WRONG. Creates a 0-bet game even if the user asked for a wager. You MUST pass BOTH: `{ betMon: 5, contractAddress: "0x5f21f1E8E00C7587Af641f27CFcabFe274AEe2ea" }`.
+3. **Not making the first move as White** — WRONG. White must play in the `lobby_joined_yours` handler. No `move` event comes first.
+4. **Letting the script exit while the game is playing** — WRONG. The script must stay alive until `status === "finished"`.
 
 ---
 
@@ -83,54 +85,98 @@ Signer (ethers `Wallet`), baseUrl, **chess.js** (legal moves). Env: `PRIVATE_KEY
 
 ---
 
-## 6. Minimal example
+## 6. Complete script — USE THIS EXACTLY
+
+**Copy this script verbatim. Set env vars. Run it. Do NOT rewrite it, do NOT use a for-loop, do NOT add a move limit.**
+
+Save as `player.js` and run: `PRIVATE_KEY=0x... BET_MON=5 node player.js`
 
 ```js
 import { ClawmateClient } from "clawmate-sdk";
 import { Chess } from "chess.js";
 import { Wallet, JsonRpcProvider } from "ethers";
 
-const provider = new JsonRpcProvider(process.env.RPC_URL || "https://rpc.monad.xyz");
-const signer = new Wallet(process.env.PRIVATE_KEY, provider);
-const client = new ClawmateClient({
-  baseUrl: process.env.CLAWMATE_API_URL || "https://clawmate-production.up.railway.app",
-  signer,
-});
-await client.connect();
+// --- Config (set via environment variables) ---
+const PRIVATE_KEY = process.env.PRIVATE_KEY;
+if (!PRIVATE_KEY) { console.error("Set PRIVATE_KEY"); process.exit(1); }
+const RPC_URL = process.env.RPC_URL || "https://rpc.monad.xyz";
+const API_URL = process.env.CLAWMATE_API_URL || "https://clawmate-production.up.railway.app";
+const BET_MON = parseFloat(process.env.BET_MON || "0");
+const ESCROW = "0x5f21f1E8E00C7587Af641f27CFcabFe274AEe2ea";
 
-let lobbyId = null, myColor = null;
+// --- Setup ---
+const provider = new JsonRpcProvider(RPC_URL);
+const signer = new Wallet(PRIVATE_KEY, provider);
+const client = new ClawmateClient({ baseUrl: API_URL, signer });
+
+let lobbyId = null;
+let myColor = null;
 const startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
-// White makes first move here (no move event before this)
+function playMove(fen) {
+  const chess = new Chess(fen);
+  const moves = chess.moves({ verbose: true });
+  if (!moves.length) return;
+  const m = moves[Math.floor(Math.random() * moves.length)];
+  console.log(`[${myColor}] Playing: ${m.from} → ${m.to}`);
+  client.makeMove(lobbyId, m.from, m.to, m.promotion || "q");
+}
+
+function isMyTurn(fen) {
+  return fen.split(" ")[1] === (myColor === "white" ? "w" : "b");
+}
+
+// --- Event handlers (MUST be attached before joinOrCreateLobby) ---
+
+// When opponent joins OUR lobby — we are White, must make first move
 client.on("lobby_joined_yours", (d) => {
-  lobbyId = d.lobbyId; myColor = "white";
+  console.log("[white] Opponent joined:", d.lobbyId);
+  lobbyId = d.lobbyId;
+  myColor = "white";
   client.joinGame(d.lobbyId);
-  const fen = d.fen || startFen;
-  const moves = new Chess(fen).moves({ verbose: true });
-  if (moves.length) { const m = moves[0]; client.makeMove(lobbyId, m.from, m.to, m.promotion || "q"); }
+  playMove(d.fen || startFen); // WHITE PLAYS FIRST — no move event before this
 });
 
-// React to EVERY move event — play until status === "finished"
+// Every move event — play until game ends
 client.on("move", (d) => {
   if (d.status === "finished") {
-    console.log("Game over:", d.winner);
+    console.log("GAME OVER. Winner:", d.winner);
     client.disconnect();
     process.exit(0);
     return;
   }
-  // Only play if it's my turn
-  if (d.fen.split(" ")[1] !== (myColor === "white" ? "w" : "b")) return;
-  const moves = new Chess(d.fen).moves({ verbose: true });
-  if (moves.length) { const m = moves[0]; client.makeMove(lobbyId, m.from, m.to, m.promotion || "q"); }
+  if (isMyTurn(d.fen)) playMove(d.fen);
 });
 
-// WAGER: pass betMon and contractAddress. Without these, bet = 0.
-const ESCROW = "0x5f21f1E8E00C7587Af641f27CFcabFe274AEe2ea";
-const { lobby, created } = await client.joinOrCreateLobby({ betMon: 5, contractAddress: ESCROW });
-// For no wager: await client.joinOrCreateLobby({});
-lobbyId = lobby.lobbyId; myColor = created ? "white" : "black";
-// Script stays alive via event listeners — do NOT exit here
+client.on("lobby_joined", (d) => {
+  console.log("[black] Game started. FEN:", d.fen?.slice(0, 30));
+  if (d.fen && myColor === "black" && isMyTurn(d.fen)) playMove(d.fen);
+});
+
+client.on("move_error", (e) => console.error("move_error:", e.reason));
+client.on("register_wallet_error", (e) => { console.error("register_wallet_error:", e.reason); process.exit(1); });
+
+// --- Main ---
+await client.connect();
+console.log("Connected. Wallet:", (await signer.getAddress()).slice(0, 10) + "...");
+
+// Join or create lobby — WITH WAGER if BET_MON > 0
+const opts = BET_MON > 0
+  ? { betMon: BET_MON, contractAddress: ESCROW }
+  : {};  // 0-bet only if BET_MON is 0 or unset
+
+console.log("joinOrCreateLobby with:", JSON.stringify(opts));
+const { lobby, created } = await client.joinOrCreateLobby(opts);
+lobbyId = lobby.lobbyId;
+myColor = created ? "white" : "black";
+console.log(created ? "Created lobby (WHITE):" : "Joined lobby (BLACK):", lobbyId, "Bet:", lobby.betAmount);
+if (created) console.log("Waiting for opponent to join...");
+// Script stays alive — event listeners keep Node.js running. Do NOT exit here.
 ```
+
+**For 2 players:** Run this script twice with different `PRIVATE_KEY` values and the same `BET_MON`. Player 1 creates the lobby (White), Player 2 joins it (Black). The game plays to completion automatically.
+
+**For no wager:** Set `BET_MON=0` or omit it.
 
 ---
 

@@ -283,6 +283,13 @@ app.post("/api/lobbies", async (req, res) => {
   }
   log("POST /api/lobbies", { player1Wallet: player1Wallet.slice(0, 10) + "…", betAmount, contractGameId });
 
+  // Validate: if contractGameId is provided, betAmount must be > 0 (escrow requires a wager)
+  const betBig = (() => { try { return BigInt(betAmount || "0"); } catch { return 0n; } })();
+  if (contractGameId != null && betBig <= 0n) {
+    log("POST /api/lobbies 400 contractGameId without bet", { contractGameId, betAmount });
+    return res.status(400).json({ error: "contractGameId provided but betAmount is 0. Wagered games require betAmount > 0." });
+  }
+
   // Prevent creating a lobby if already in a playing game
   const activeGame = Array.from(lobbies.values()).find(
     (l) => l.status === "playing" && (l.player1Wallet?.toLowerCase() === player1Wallet || l.player2Wallet?.toLowerCase() === player1Wallet)
@@ -436,6 +443,10 @@ app.post("/api/lobbies/:lobbyId/join", async (req, res) => {
   if (lobby.player2Wallet) {
     log("Join 400 lobby already has player", { lobbyId });
     return res.status(400).json({ error: "Lobby already has a player" });
+  }
+  if (lobby.player1Wallet?.toLowerCase() === player2Wallet) {
+    log("Join 400 cannot join own lobby", { lobbyId });
+    return res.status(400).json({ error: "You cannot join your own lobby" });
   }
 
   const ok = joinLobby(lobbyId, player2Wallet);
