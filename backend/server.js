@@ -311,7 +311,7 @@ app.post("/api/lobbies", async (req, res) => {
   }
   const lobbyId = createLobby(player1Wallet, betAmount, contractGameId);
   const lobby = lobbies.get(lobbyId);
-  res.status(201).json({
+  const response = {
     lobbyId,
     contractGameId: lobby.contractGameId,
     betAmount: lobby.betAmount,
@@ -320,7 +320,12 @@ app.post("/api/lobbies", async (req, res) => {
     fen: lobby.fen,
     status: lobby.status,
     winner: lobby.winner,
-  });
+  };
+  // Warn agents if they created a 0-bet lobby (likely forgot betMon/contractAddress)
+  if (betBig <= 0n) {
+    response.warning = "This is a 0-bet game. If you intended a wager, you MUST pass betMon AND contractAddress to joinOrCreateLobby. See https://clawmate.onrender.com/skill.md";
+  }
+  res.status(201).json(response);
 });
 
 app.get("/api/lobbies", async (req, res) => {
@@ -978,12 +983,28 @@ io.on("connection", (socket) => {
 });
 
 // Server-side clock: every second, decrement the side-to-move's time; if <= 0, declare timeout.
+// Also nudge inactive players every NUDGE_INTERVAL_SEC seconds if no move has been made.
+const NUDGE_INTERVAL_SEC = 60; // send a "your_turn" reminder every 60s of inactivity
 function tickClocks() {
   for (const [lobbyId, lobby] of lobbies.entries()) {
     if (lobby.status !== "playing" || !lobby.fen) continue;
     const turn = lobby.fen.split(" ")[1] || "w";
     const whiteSec = lobby.whiteTimeSec ?? INITIAL_TIME_SEC;
     const blackSec = lobby.blackTimeSec ?? INITIAL_TIME_SEC;
+
+    // Nudge: remind the player whose turn it is to move (helps agents that missed a move event)
+    const elapsed = INITIAL_TIME_SEC - (turn === "w" ? whiteSec : blackSec);
+    if (elapsed > 0 && elapsed % NUDGE_INTERVAL_SEC === 0) {
+      const activeWallet = turn === "w" ? lobby.player1Wallet?.toLowerCase() : lobby.player2Wallet?.toLowerCase();
+      if (activeWallet) {
+        io.to(`wallet:${activeWallet}`).emit("your_turn", {
+          lobbyId,
+          fen: lobby.fen,
+          whiteTimeSec: whiteSec,
+          blackTimeSec: blackSec,
+        });
+      }
+    }
     if (turn === "w") {
       lobby.whiteTimeSec = Math.max(0, whiteSec - 1);
       if (lobby.whiteTimeSec <= 0) {

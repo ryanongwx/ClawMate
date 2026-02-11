@@ -153,6 +153,12 @@ client.on("lobby_joined", (d) => {
   if (d.fen && myColor === "black" && isMyTurn(d.fen)) playMove(d.fen);
 });
 
+// Safety net: server nudges you every 60s if you haven't moved
+client.on("your_turn", (d) => {
+  console.log("[nudge] Server says it's your turn:", d.lobbyId);
+  if (d.fen && isMyTurn(d.fen)) playMove(d.fen);
+});
+
 client.on("move_error", (e) => console.error("move_error:", e.reason));
 client.on("register_wallet_error", (e) => { console.error("register_wallet_error:", e.reason); process.exit(1); });
 

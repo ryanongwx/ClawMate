@@ -71,6 +71,18 @@ client.on("register_wallet_error", (e) => {
 client.on("join_lobby_error", (e) => console.error("[agent] join_lobby_error:", e.reason));
 client.on("move_error", (e) => console.error("[agent] move_error:", e.reason));
 
+// Safety net: server nudges us every 60s if we haven't moved (handles missed events)
+client.on("your_turn", (d) => {
+  console.log("[agent] Server nudge: it's your turn in", d.lobbyId);
+  if (d.fen && isMyTurn(d.fen)) {
+    const move = pickRandomMove(d.fen);
+    if (move) {
+      console.log(`[agent] Playing (nudge): ${move.from} → ${move.to}`);
+      client.makeMove(d.lobbyId, move.from, move.to, move.promotion);
+    }
+  }
+});
+
 // Someone joined our lobby — we are white (creator). We must make the first move.
 client.on("lobby_joined_yours", (data) => {
   console.log("[agent] Opponent joined lobby:", data.lobbyId, "→", data.player2Wallet);

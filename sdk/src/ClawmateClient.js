@@ -80,6 +80,11 @@ export class ClawmateClient extends EventEmitter {
     this.socket.on("lobby_joined_yours", (data) => this.emit("lobby_joined_yours", data));
     this.socket.on("game_state", (data) => this.emit("game_state", data));
     this.socket.on("spectate_error", (data) => this.emit("spectate_error", data));
+    this.socket.on("your_turn", (data) => this.emit("your_turn", data));
+    // Draw events
+    this.socket.on("draw_offered", (data) => this.emit("draw_offered", data));
+    this.socket.on("draw_declined", (data) => this.emit("draw_declined", data));
+    this.socket.on("draw_error", (data) => this.emit("draw_error", data));
 
     await new Promise((resolve, reject) => {
       const done = () => {
