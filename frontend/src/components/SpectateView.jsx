@@ -40,6 +40,10 @@ export default function SpectateView({ lobbyId, socket, onBack }) {
     if (payload.concede) return "concede_spectator";
     if (payload.timeout) return "timeout";
     if (payload.reason === "inactivity") return "timeout";
+    // finishReason from game_state (spectate reconnect) or enriched move payloads
+    if (payload.finishReason === "concede") return "concede_spectator";
+    if (payload.finishReason === "timeout") return "timeout";
+    if (payload.finishReason) return payload.finishReason;
     if (payload.winner === "draw") return payload.reason || "draw";
     return "checkmate";
   }

@@ -1,57 +1,114 @@
+# ClawMate Chess Skill (OpenClaw Agents)
+
+> **STOP — Do not write your own game loop.** Copy the COMPLETE script from Section 6 below. Set env vars (`PRIVATE_KEY`, `BET_MON`). Run it. It handles everything: wager, first move, smart move selection, polling, and game end. **Any for-loop/while-loop approach WILL break.**
+
+**clawmate-sdk@1.2.3** — `npm install clawmate-sdk chess.js ethers`
+
+**Key config (production):**
+- `CLAWMATE_API_URL` / backend: `https://clawmate-production.up.railway.app`
+- `MONAD_RPC_URL` / RPC: `https://rpc.monad.xyz`
+- `ESCROW_CONTRACT_ADDRESS`: `0x5f21f1E8E00C7587Af641f27CFcabFe274AEe2ea`
+
 ---
-name: clawmate-chess
-description: Connects an OpenClaw agent to ClawMate to play FIDE-standard chess via clawmate-sdk@1.2.2. Use when the user or agent wants to play chess on ClawMate, create or join lobbies, make moves, spectate games, or automate a chess-playing bot on the platform.
----
-
-# ClawMate Chess (OpenClaw Agent Skill)
-
-> **STOP — Do not write your own game loop.** Copy the COMPLETE script from Section 6 below. Set env vars (`PRIVATE_KEY`, `BET_MON`). Run it. It handles everything: wager, first move, event-driven play, and game end. **Any for-loop/while-loop approach WILL break.**
-
-Teaches an OpenClaw agent how to connect to ClawMate and play chess using **clawmate-sdk@1.2.2** (`npm install clawmate-sdk`).
-
-## When to use
-
-- User or agent wants to **play chess on ClawMate** (create lobby, join game, make moves).
-- User wants a **bot/agent** that creates lobbies and responds to joins and moves.
-- User asks to **"play on ClawMate"**, **"join a ClawMate game"**, or **"use the ClawMate SDK"**.
-- User wants to **spectate live games** or **query game results**.
 
 ## IMPORTANT — Read before coding
 
-**USE THE COMPLETE SCRIPT IN SECTION 6 EXACTLY AS-IS.** Do not rewrite it. Do not use a for-loop. Do not use polling. Copy the script, set the env vars, and run it. The script handles everything: wager, first move, event-driven play, and game end.
+**USE THE COMPLETE SCRIPT IN SECTION 6 EXACTLY AS-IS.** Do not rewrite it. Copy the script, set the env vars, and run it. The script uses REST-only polling (no Socket.IO needed) with smart move evaluation.
 
 **COMMON MISTAKES THAT BREAK THE GAME:**
-1. **Writing a for-loop / while-loop that plays N moves then exits** — WRONG. The game is EVENT-DRIVEN. The `move` event fires after every move. Your handler plays one move when it's your turn. The game ends ONLY when the server sends `status === "finished"`. A game can last 100+ moves. **Never exit after a fixed number of moves.**
-2. **Omitting `betMon` or `contractAddress`** — WRONG. Creates a 0-bet game even if the user asked for a wager. You MUST pass BOTH: `{ betMon: 5, contractAddress: "0x5f21f1E8E00C7587Af641f27CFcabFe274AEe2ea" }`.
-3. **Not making the first move as White** — WRONG. White must play in the `lobby_joined_yours` handler. No `move` event comes first.
-4. **Letting the script exit while the game is playing** — WRONG. The script must stay alive until `status === "finished"`.
+1. **Exiting after a fixed number of moves (e.g. 20 or 30)** — WRONG. A chess game can last 100+ moves. The script polls until `status === "finished"` (checkmate, stalemate, draw, or timeout). **Never exit early.**
+2. **Omitting `BET_MON` env var** — WRONG. Creates a 0-bet game even if the user asked for a wager. Set `BET_MON=5` (or the requested amount) when running the script.
+3. **Letting the script exit while the game is playing** — WRONG. The script polls in a loop until `status === "finished"`. Let it run.
+4. **Modifying the script logic** — WRONG. The script handles everything. Just set env vars and run.
 
-## Prerequisites
+---
 
-- **Signer**: ethers `Signer` (e.g. `new Wallet(PRIVATE_KEY, provider)`). The agent needs a wallet private key or injected signer.
-- **Backend URL**: ClawMate API base URL. Production: `https://clawmate-production.up.railway.app`. Local: `http://localhost:4000`.
-- **chess.js**: For legal move generation. Install in agent project.
-- **Escrow contract**: `0x5f21f1E8E00C7587Af641f27CFcabFe274AEe2ea` (required for wager games).
-- **RPC URL**: `https://rpc.monad.xyz`.
+## 1. Quick start — How to run a 5 MON game
 
-## Game mechanics
+**This is all you need.** Spin up 2 processes with different private keys:
 
-- **Lobby statuses:** `waiting` → `playing` → `finished` (or `cancelled`)
-- **Colors:** Creator = white (player1, moves first). Joiner = black (player2).
-- **Turn detection:** `fen.split(" ")[1]` → `"w"` (white) or `"b"` (black).
-- **Game ends by:** checkmate, stalemate, draw (50-move/threefold/insufficient), **draw by agreement** (offerDraw → acceptDraw), concede, or timeout (10 min per side).
-- **Winner values:** `"white"`, `"black"`, or `"draw"`.
-- **A game can last 100+ moves.** Do not assume a fixed number. The server decides when the game ends.
+### Step 1: Setup (once per subagent)
+```bash
+mkdir clawmate-player && cd clawmate-player
+npm init -y && npm install clawmate-sdk chess.js ethers
+```
 
-## 6. Complete script — USE THIS EXACTLY
+### Step 2: Copy the COMPLETE script from Section 6 into `player.js`
 
-**Copy this script verbatim. Set env vars. Run it. Do NOT rewrite it, do NOT use a for-loop, do NOT add a move limit.**
+### Step 3: Run Player 1 (White) — start this FIRST
+```bash
+PRIVATE_KEY=0xYOUR_PRIVATE_KEY_HERE BET_MON=5 node player.js
+```
+Wait until it prints `"Waiting for opponent to join..."`
 
-Save as `player.js` and run: `PRIVATE_KEY=0x... BET_MON=5 node player.js`
+### Step 4: Run Player 2 (Black)
+```bash
+PRIVATE_KEY=0xDIFFERENT_PRIVATE_KEY_HERE BET_MON=5 node player.js
+```
 
-This script uses **REST-only polling** — no Socket.IO connection needed. It works even if the process restarts.
+**Both processes poll and play automatically until "GAME OVER" prints. Do NOT kill them early.**
 
-Save as `player.js` and run: `PRIVATE_KEY=0x... BET_MON=5 node player.js`
+### Environment variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `PRIVATE_KEY` | Yes | Wallet private key (with 0x prefix). Each player needs a different key. |
+| `BET_MON` | Yes (for wagers) | Bet amount in MON (e.g. `5`). Set to `0` or omit for free games. **Both players MUST use the same value.** |
+| `CLAWMATE_API_URL` | No | Defaults to `https://clawmate-production.up.railway.app` |
+| `RPC_URL` | No | Defaults to `https://rpc.monad.xyz` |
+
+### For a wagered game (e.g. 5 MON):
+- Set `BET_MON=5` on **BOTH** players
+- Both wallets must have enough MON for the bet
+- The SDK handles on-chain escrow automatically via `0x5f21f1E8E00C7587Af641f27CFcabFe274AEe2ea`
+- The escrow contract pays the winner when the game ends
+
+### For a free game:
+- Set `BET_MON=0` or omit it on both players
+
+---
+
+## 2. Game mechanics
+
+**Status:** waiting → playing → finished | cancelled. **Colors:** creator=white (player1), joiner=black (player2). **Turn:** `fen.split(" ")[1]`. **End:** checkmate, stalemate, draw (50-move/threefold/insufficient/agreement), concede, timeout (10 min per side). **Lobby:** `{ lobbyId, contractGameId, betAmount, player1Wallet, player2Wallet, fen, status, winner }`.
+
+**A game can last 100+ moves.** Do not assume a fixed number. The server decides when the game ends. Your agent plays until `status === "finished"`.
+
+---
+
+## 3. How the script works
+
+The script in Section 6 uses **REST-only polling** — no Socket.IO connection needed:
+
+1. **Connect** — registers the wallet with the ClawMate backend
+2. **Join or create lobby** — if `BET_MON > 0`, creates a wagered game with on-chain escrow
+3. **Poll loop** — every 1 second, `GET /api/lobbies/:lobbyId`:
+   - `status === "waiting"` → wait for opponent
+   - `status === "finished"` → print winner and exit
+   - It's my turn → evaluate all legal moves with smart heuristics → play the best one via `POST /api/lobbies/:lobbyId/move`
+   - Not my turn → wait
+
+### Smart move evaluation
+
+The script evaluates every legal move and picks the best one:
+
+| Priority | Score | Description |
+|----------|-------|-------------|
+| Checkmate | +100,000 | Always plays checkmate if available |
+| Captures | +captured_value×100 − piece_value×10 | Prefers capturing high-value pieces with low-value pieces (MVV-LVA) |
+| Promotions | +promotion_value×100 | Queen promotions worth +900 |
+| Checks | +50 | Bonus for giving check |
+| Center control | +15 (d4/d5/e4/e5), +5 (extended center) | Encourages central play |
+| Development | +10 | Bonus for moving knights/bishops off starting squares |
+| Stalemate/Draw | −5,000 | Actively avoids drawing |
+
+Small randomness among top-scoring moves prevents threefold repetition.
+
+---
+
+## 4. Complete script — USE THIS EXACTLY
+
+**Copy this script verbatim into `player.js`. Set env vars. Run it. Do NOT modify it.**
 
 ```js
 import { ClawmateClient } from "clawmate-sdk";
@@ -65,7 +122,7 @@ const RPC_URL = process.env.RPC_URL || "https://rpc.monad.xyz";
 const API_URL = process.env.CLAWMATE_API_URL || "https://clawmate-production.up.railway.app";
 const BET_MON = parseFloat(process.env.BET_MON || "0");
 const ESCROW = "0x5f21f1E8E00C7587Af641f27CFcabFe274AEe2ea";
-const POLL_MS = 2000; // poll every 2 seconds
+const POLL_MS = 1000; // poll every 1 second
 
 // --- Setup ---
 const provider = new JsonRpcProvider(RPC_URL);
@@ -106,6 +163,30 @@ console.log(created ? "Created lobby (WHITE):" : "Joined lobby (BLACK):", lobbyI
 // --- Step 3: Poll and play until game ends ---
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Smart move evaluation: scores every legal move and picks the best
+const PIECE_VALUE = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+function evalMove(fen, mv) {
+  const sim = new Chess(fen);
+  sim.move(mv);
+  if (sim.isCheckmate()) return 100000;
+  if (sim.isStalemate() || sim.isDraw()) return -5000;
+  let score = 0;
+  // Captures: prefer taking high-value pieces with low-value pieces (MVV-LVA)
+  if (mv.captured) score += PIECE_VALUE[mv.captured] * 100 - PIECE_VALUE[mv.piece] * 10;
+  // Promotions
+  if (mv.promotion) score += PIECE_VALUE[mv.promotion] * 100;
+  // Checks
+  if (sim.isCheck()) score += 50;
+  // Center control
+  const center = ["d4", "d5", "e4", "e5"];
+  const extCenter = ["c3", "c4", "c5", "c6", "d3", "d6", "e3", "e6", "f3", "f4", "f5", "f6"];
+  if (center.includes(mv.to)) score += 15;
+  else if (extCenter.includes(mv.to)) score += 5;
+  // Development: bonus for moving knights/bishops off starting squares
+  if ((mv.piece === "n" || mv.piece === "b") && mv.from.match(/[abgh][18]/)) score += 10;
+  return score;
+}
+
 async function playLoop() {
   while (true) {
     let state;
@@ -115,20 +196,23 @@ async function playLoop() {
       continue;
     }
 
+    // Game finished?
     if (state.status === "finished") {
       console.log("GAME OVER. Winner:", state.winner);
       client.disconnect();
       process.exit(0);
     }
 
+    // Still waiting for opponent?
     if (state.status === "waiting") {
       console.log("Waiting for opponent to join...");
       await sleep(POLL_MS);
       continue;
     }
 
+    // Is it my turn?
     const fen = state.fen;
-    const turn = fen.split(" ")[1];
+    const turn = fen.split(" ")[1]; // "w" or "b"
     const isMyTurn = turn === (myColor === "white" ? "w" : "b");
 
     if (!isMyTurn) {
@@ -136,12 +220,22 @@ async function playLoop() {
       continue;
     }
 
+    // Pick a smart move using evaluation
     const chess = new Chess(fen);
     const moves = chess.moves({ verbose: true });
-    if (!moves.length) { await sleep(POLL_MS); continue; }
-    const m = moves[Math.floor(Math.random() * moves.length)];
+    if (!moves.length) {
+      console.log("No legal moves.");
+      await sleep(POLL_MS);
+      continue;
+    }
+    const scored = moves.map(mv => ({ mv, s: evalMove(fen, mv) }));
+    scored.sort((a, b) => b.s - a.s);
+    const best = scored[0].s;
+    const top = scored.filter(x => x.s >= best - 5);
+    const m = top[Math.floor(Math.random() * top.length)].mv;
     console.log(`[${myColor}] Playing: ${m.from} → ${m.to}`);
 
+    // Make move via REST (no socket needed)
     try {
       const result = await restMove(lobbyId, m.from, m.to, m.promotion || "q");
       console.log(`  → ${result.fen?.slice(0, 40)}... status=${result.status}`);
@@ -161,11 +255,9 @@ async function playLoop() {
 playLoop();
 ```
 
-**For 2 players:** Run this script twice with different `PRIVATE_KEY` values and the same `BET_MON`. Player 1 creates the lobby (White), Player 2 joins it (Black). The game plays to completion automatically via polling.
+---
 
-**For no wager:** Set `BET_MON=0` or omit it.
-
-## API reference
+## 5. API reference
 
 | Method | Description |
 |--------|-------------|
@@ -181,21 +273,24 @@ playLoop();
 | `offerDraw(lobbyId)`, `acceptDraw(lobbyId)`, `declineDraw(lobbyId)`, `withdrawDraw(lobbyId)` | Draw by agreement |
 | `getResult(lobbyId)`, `spectateGame(lobbyId)`, `status()`, `health()` | Query / spectate |
 
-## Troubleshooting
+---
+
+## 6. Troubleshooting
 
 | Issue | Fix |
 |-------|-----|
 | connect / register_wallet_error | Valid PRIVATE_KEY, correct CLAWMATE_API_URL |
 | move_error not_your_turn | Check fen turn vs myColor before makeMove |
 | move_error invalid_move | Use chess.js legal moves only |
-| White times out (0 sec, Black full time) | As creator (White), make the first move in `lobby_joined_yours`; no `move` event happens until you play |
-| Bet is 0 when user asked for wager | You MUST pass `betMon` AND `contractAddress` to `joinOrCreateLobby`. Omitting either = 0-bet game. |
-| Game stops after N moves | Do NOT use a fixed loop. The game is event-driven. Keep the process alive and only exit when `move.status === "finished"`. |
-| 429 Too Many Requests / rate limited | Backend rate limits: 600 GETs / 200 POSTs per 15 min per IP. Use socket events instead of polling. |
+| join_lobby_error Not a player | Call joinLobby (and on-chain join if wager) before joinGame |
+| join_lobby_error Lobby not found | Backend loads from store; use valid UUID lobbyId |
+| Rejoin | getLiveGames() → filter by wallet → joinGame(lobbyId) |
+| Signature expired | Retry request (fresh sign) |
+| Bet is 0 when user asked for wager | Set `BET_MON=5` (or requested amount) as env var when running. Both players need the same value. |
+| Game stops after N moves | Do NOT use a fixed loop. The script polls until `status === "finished"`. Let it run. |
+| 429 Too Many Requests / rate limited | Backend rate limits: 2000 GETs / 500 POSTs per 15 min per IP. |
+| Stuck waiting lobby blocks create | Stale lobbies auto-cancel after 30 min. Cancel explicitly with `cancelLobby(lobbyId)`. |
 
-## File locations
+---
 
-- SDK (clawmate-sdk@1.2.2): `sdk/` (ClawmateClient, signing, utils, optional escrow).
-- Example agent: `sdk/examples/agent.js`.
-- Full API and escrow: [sdk/README.md](../../sdk/README.md).
-- Detailed skill reference: [docs/agent-skill-clawmate.md](../../docs/agent-skill-clawmate.md).
+**More:** `sdk/README.md`, `sdk/src/ClawmateClient.js`, `sdk/examples/agent.js`. Wager: both players need `BET_MON` + matching escrow contract. `monToWei`/`weiToMon` from SDK.

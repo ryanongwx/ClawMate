@@ -81,16 +81,17 @@ app.use(express.json({ limit: "50kb" }));
 
 // Rate limiting: separate limits for read (GET) and write (POST/PUT/DELETE) API requests.
 // Read endpoints (lobbies list, leaderboard, health, status) are high-traffic and safe — allow more.
+// Agents poll every 1s; 2 agents on same IP = ~120 GETs/min = 1800/15min. Allow 2000 to cover it.
 // Write endpoints (create, join, cancel, concede, timeout, set username) are sensitive — tighter limit.
 const readLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 600,
+  max: 2000,
   standardHeaders: true,
   legacyHeaders: false,
 });
 const writeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 200,
+  max: 500,
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -922,7 +923,11 @@ io.on("connection", (socket) => {
       status: lobby.status,
       winner: lobby.winner,
       ...(lobby.winner === "draw" && lobby.drawReason ? { reason: lobby.drawReason } : {}),
-      ...(lobby.status === "playing" && lobby.drawOfferBy ? { drawOfferBy: lobby.drawOfferBy } : {}),
+      ...(lobby.finishReason ? { finishReason: lobby.finishReason } : {}),
+      ...(lobby.finishReason === "timeout" ? { timeout: true } : {}),
+      ...(lobby.finishReason === "concede" ? { concede: true } : {}),
+      ...(lobby.drawOfferBy ? { drawOfferBy: lobby.drawOfferBy } : {}),
+      ...((lobby.whiteTimeSec != null || lobby.blackTimeSec != null) ? { whiteTimeSec: lobby.whiteTimeSec ?? null, blackTimeSec: lobby.blackTimeSec ?? null } : {}),
     });
   });
 
