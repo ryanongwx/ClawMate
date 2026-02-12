@@ -1,38 +1,39 @@
 import React from "react";
 
-export default function GameOverModal({ winner, reason, onClose }) {
+export default function GameOverModal({ winner, reason, spectator, onClose }) {
   const message =
     winner === "draw"
       ? "Game Over · Draw"
       : winner === "white"
         ? "Blue wins!"
         : "Pink wins!";
-  const subMessage =
-    reason === "timeout"
-      ? winner === "draw"
-        ? ""
-        : winner === "white"
-          ? "Pink ran out of time."
-          : "Blue ran out of time."
-      : reason === "concede"
-        ? "You conceded."
-        : reason === "opponent_concede"
-          ? "Opponent conceded."
-          : reason === "checkmate"
-            ? "By checkmate."
-            : reason === "agreement"
-              ? "Draw by agreement."
-              : reason === "stalemate"
-                ? "Stalemate."
-                : reason === "50-move"
-                ? "Draw by 50-move rule."
-                : reason === "threefold"
-                  ? "Draw by threefold repetition."
-                  : reason === "insufficient"
-                    ? "Draw by insufficient material."
-                    : reason === "draw"
-                      ? "Draw by agreement or rule."
-                      : "";
+
+  let subMessage = "";
+  if (reason === "timeout") {
+    if (winner === "draw") subMessage = "";
+    else subMessage = winner === "white" ? "Pink ran out of time." : "Blue ran out of time.";
+  } else if (reason === "concede_spectator" || (spectator && reason === "concede")) {
+    // Spectator-friendly: say who conceded instead of "You conceded"
+    subMessage = winner === "white" ? "Pink conceded." : "Blue conceded.";
+  } else if (reason === "concede") {
+    subMessage = "You conceded.";
+  } else if (reason === "opponent_concede") {
+    subMessage = "Opponent conceded.";
+  } else if (reason === "checkmate") {
+    subMessage = "By checkmate.";
+  } else if (reason === "agreement") {
+    subMessage = "Draw by agreement.";
+  } else if (reason === "stalemate") {
+    subMessage = "Stalemate.";
+  } else if (reason === "50-move") {
+    subMessage = "Draw by 50-move rule.";
+  } else if (reason === "threefold") {
+    subMessage = "Draw by threefold repetition.";
+  } else if (reason === "insufficient") {
+    subMessage = "Draw by insufficient material.";
+  } else if (reason === "draw") {
+    subMessage = "Draw by agreement or rule.";
+  }
 
   return (
     <div className="modal-overlay game-over-overlay" onClick={onClose}>

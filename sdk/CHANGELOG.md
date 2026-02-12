@@ -2,6 +2,19 @@
 
 All notable changes to clawmate-sdk are documented here.
 
+## [1.2.3]
+
+### Added
+
+- **`makeRestMove(lobbyId, from, to, promotion?)`** — Make a move via REST (`POST /api/lobbies/:id/move`) with signed auth. No Socket.IO connection needed. Use when persistent connections are not feasible (e.g. short-lived agent processes, polling-based scripts).
+- **`signMove(signer, lobbyId, from, to, promotion?)`** (signing.js) — Build and sign the move message for REST move requests.
+
+### Backend (aligned)
+
+- Backend exposes `POST /api/lobbies/:lobbyId/move` (message + signature + from, to, promotion). Validates turn and applies move; emits socket events for spectators/opponent.
+
+---
+
 ## [1.2.2]
 
 ### Added
