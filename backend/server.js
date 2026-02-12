@@ -222,13 +222,15 @@ function applyMove(lobbyId, from, to, promotion = "q") {
     if (lobby.chess.isCheckmate()) {
       lobby.status = "finished";
       lobby.winner = lobby.chess.turn() === "w" ? "black" : "white";
+      lobby.finishReason = "checkmate";
     } else if (lobby.chess.isDraw() || lobby.chess.isStalemate()) {
       lobby.status = "finished";
       lobby.winner = "draw";
       lobby.drawReason = getDrawReason(lobby.chess);
+      lobby.finishReason = lobby.drawReason;
     }
     if (lobby.status === "finished") {
-      log("Game finished (move)", { lobbyId, winner: lobby.winner, reason: lobby.winner === "draw" ? lobby.drawReason : "checkmate" });
+      log("Game finished (move)", { lobbyId, winner: lobby.winner, reason: lobby.finishReason });
     }
     saveLobby(lobby).catch(() => {});
     return {
@@ -395,8 +397,9 @@ app.get("/api/lobbies/:lobbyId", async (req, res) => {
     status: lobby.status,
     winner: lobby.winner,
     ...(lobby.winner === "draw" && lobby.drawReason ? { drawReason: lobby.drawReason } : {}),
+    ...(lobby.finishReason ? { finishReason: lobby.finishReason } : {}),
     ...(lobby.status === "playing" && lobby.drawOfferBy ? { drawOfferBy: lobby.drawOfferBy } : {}),
-    ...(lobby.status === "playing" && (lobby.whiteTimeSec != null || lobby.blackTimeSec != null) ? { whiteTimeSec: lobby.whiteTimeSec ?? null, blackTimeSec: lobby.blackTimeSec ?? null } : {}),
+    ...((lobby.whiteTimeSec != null || lobby.blackTimeSec != null) ? { whiteTimeSec: lobby.whiteTimeSec ?? null, blackTimeSec: lobby.blackTimeSec ?? null } : {}),
   });
 });
 
@@ -581,6 +584,7 @@ app.post("/api/lobbies/:lobbyId/concede", async (req, res) => {
   }
   lobby.status = "finished";
   lobby.winner = isP1 ? "black" : "white"; // other side wins
+  lobby.finishReason = "concede";
   saveLobby(lobby).catch(() => {});
   log("Game conceded", { lobbyId, winner: lobby.winner });
   const concedePayload = { lobbyId, fen: lobby.fen, winner: lobby.winner, status: "finished", concede: true };
@@ -740,9 +744,10 @@ app.post("/api/lobbies/:lobbyId/timeout", (req, res) => {
   // Player who timed out loses; other wins.
   lobby.status = "finished";
   lobby.winner = isP1 ? "black" : "white";
+  lobby.finishReason = "timeout";
   saveLobby(lobby).catch(() => {});
   log("Game finished (timeout)", { lobbyId, winner: lobby.winner });
-  const timeoutPayload = { lobbyId, fen: lobby.fen, winner: lobby.winner, status: "finished" };
+  const timeoutPayload = { lobbyId, fen: lobby.fen, winner: lobby.winner, status: "finished", timeout: true };
   io.to(lobbyId).emit("move", timeoutPayload);
   const tp1 = lobby.player1Wallet?.toLowerCase();
   const tp2 = lobby.player2Wallet?.toLowerCase();
@@ -1023,6 +1028,7 @@ io.on("connection", (socket) => {
     lobby.status = "finished";
     lobby.winner = "draw";
     lobby.drawReason = "agreement";
+    lobby.finishReason = "agreement";
     lobby.drawOfferBy = null;
     saveLobby(lobby).catch(() => {});
     resolveEscrowIfNeeded(lobby).catch(() => {});
@@ -1101,6 +1107,7 @@ function tickClocks() {
         lobby.status = "finished";
         lobby.winner = "black";
         lobby.whiteTimeSec = 0;
+        lobby.finishReason = "timeout";
         saveLobby(lobby).catch(() => {});
         log("Game finished (timeout)", { lobbyId, winner: lobby.winner });
         const payload = { lobbyId, fen: lobby.fen, winner: "black", status: "finished", whiteTimeSec: 0, blackTimeSec: blackSec, timeout: true };
@@ -1117,6 +1124,7 @@ function tickClocks() {
         lobby.status = "finished";
         lobby.winner = "white";
         lobby.blackTimeSec = 0;
+        lobby.finishReason = "timeout";
         saveLobby(lobby).catch(() => {});
         log("Game finished (timeout)", { lobbyId, winner: lobby.winner });
         const payload = { lobbyId, fen: lobby.fen, winner: "white", status: "finished", whiteTimeSec: whiteSec, blackTimeSec: 0, timeout: true };

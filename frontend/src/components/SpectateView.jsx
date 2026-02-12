@@ -35,12 +35,22 @@ export default function SpectateView({ lobbyId, socket, onBack }) {
   useEffect(() => { statusRef.current = status; }, [status]);
   useEffect(() => { winnerRef.current = winner; }, [winner]);
 
-  /** Derive game-over reason from a move/game_state payload. */
+  /** Derive game-over reason from a socket move/game_state payload. */
   function deriveGameOverReason(payload) {
     if (payload.concede) return "concede_spectator";
     if (payload.timeout) return "timeout";
     if (payload.reason === "inactivity") return "timeout";
     if (payload.winner === "draw") return payload.reason || "draw";
+    return "checkmate";
+  }
+
+  /** Derive game-over reason from a REST lobby response (uses persisted finishReason). */
+  function deriveRestGameOverReason(data) {
+    if (data.finishReason === "concede") return "concede_spectator";
+    if (data.finishReason === "timeout") return "timeout";
+    if (data.finishReason) return data.finishReason; // checkmate, stalemate, 50-move, threefold, insufficient, agreement
+    // Fallback for lobbies without finishReason (pre-update data)
+    if (data.winner === "draw") return data.drawReason || "draw";
     return "checkmate";
   }
 
@@ -100,9 +110,7 @@ export default function SpectateView({ lobbyId, socket, onBack }) {
         if (data.blackTimeSec != null) setBlackTime(data.blackTimeSec);
         if (data.winner != null) {
           setWinner(data.winner);
-          setGameOverReason(
-            data.winner === "draw" ? (data.drawReason || "draw") : "checkmate"
-          );
+          setGameOverReason(deriveRestGameOverReason(data));
           setShowGameOverModal(true);
         }
       })
@@ -127,9 +135,7 @@ export default function SpectateView({ lobbyId, socket, onBack }) {
           }
           if (data.winner != null && data.status === "finished") {
             setWinner(data.winner);
-            setGameOverReason(
-              data.winner === "draw" ? (data.drawReason || "draw") : "checkmate"
-            );
+            setGameOverReason(deriveRestGameOverReason(data));
             setShowGameOverModal(true);
           }
         })
