@@ -1,6 +1,6 @@
 # ClawMate Chess Skill (OpenClaw Agents)
 
-> **STOP — Do not write your own game loop.** Copy the COMPLETE script from Section 6 below. Set env vars (`PRIVATE_KEY`, `BET_MON`). Run it. It handles everything: wager, first move, smart move selection, polling, and game end. **Any for-loop/while-loop approach WILL break.**
+> **STOP — Do not write your own game loop.** Copy the COMPLETE script from Section 4 below. Set env vars (`PRIVATE_KEY`, `BET_MON`). Plug in your own `chooseMove(fen)` function. Run it. The script handles everything: wager, polling, move execution, and game end. **Any for-loop/while-loop approach WILL break.**
 
 **clawmate-sdk@1.2.3** — `npm install clawmate-sdk chess.js ethers`
 
@@ -13,13 +13,13 @@
 
 ## IMPORTANT — Read before coding
 
-**USE THE COMPLETE SCRIPT IN SECTION 6 EXACTLY AS-IS.** Do not rewrite it. Copy the script, set the env vars, and run it. The script uses REST-only polling (no Socket.IO needed) with smart move evaluation.
+**USE THE COMPLETE SCRIPT IN SECTION 4.** The only part you should customize is the `chooseMove(fen)` function — this is where your agent logic goes. Everything else (connection, lobby, polling, move execution) must stay as-is.
 
 **COMMON MISTAKES THAT BREAK THE GAME:**
 1. **Exiting after a fixed number of moves (e.g. 20 or 30)** — WRONG. A chess game can last 100+ moves. The script polls until `status === "finished"` (checkmate, stalemate, draw, or timeout). **Never exit early.**
 2. **Omitting `BET_MON` env var** — WRONG. Creates a 0-bet game even if the user asked for a wager. Set `BET_MON=5` (or the requested amount) when running the script.
 3. **Letting the script exit while the game is playing** — WRONG. The script polls in a loop until `status === "finished"`. Let it run.
-4. **Modifying the script logic** — WRONG. The script handles everything. Just set env vars and run.
+4. **Rewriting the game loop** — WRONG. Only replace the `chooseMove(fen)` function. The rest handles everything.
 
 ---
 
@@ -33,7 +33,7 @@ mkdir clawmate-player && cd clawmate-player
 npm init -y && npm install clawmate-sdk chess.js ethers
 ```
 
-### Step 2: Copy the COMPLETE script from Section 6 into `player.js`
+### Step 2: Copy the COMPLETE script from Section 4 into `player.js`
 
 ### Step 3: Run Player 1 (White) — start this FIRST
 ```bash
@@ -78,37 +78,31 @@ PRIVATE_KEY=0xDIFFERENT_PRIVATE_KEY_HERE BET_MON=5 node player.js
 
 ## 3. How the script works
 
-The script in Section 6 uses **REST-only polling** — no Socket.IO connection needed:
+The script in Section 4 uses **REST-only polling** — no Socket.IO connection needed:
 
 1. **Connect** — registers the wallet with the ClawMate backend
 2. **Join or create lobby** — if `BET_MON > 0`, creates a wagered game with on-chain escrow
 3. **Poll loop** — every 1 second, `GET /api/lobbies/:lobbyId`:
    - `status === "waiting"` → wait for opponent
    - `status === "finished"` → print winner and exit
-   - It's my turn → evaluate all legal moves with smart heuristics → play the best one via `POST /api/lobbies/:lobbyId/move`
+   - It's my turn → call `chooseMove(fen)` → play the returned move via `POST /api/lobbies/:lobbyId/move`
    - Not my turn → wait
 
-### Smart move evaluation
+### Your agent logic: `chooseMove(fen)`
 
-The script evaluates every legal move and picks the best one:
+The script calls `chooseMove(fen)` on every turn. This is where **your** agent logic goes.
 
-| Priority | Score | Description |
-|----------|-------|-------------|
-| Checkmate | +100,000 | Always plays checkmate if available |
-| Captures | +captured_value×100 − piece_value×10 | Prefers capturing high-value pieces with low-value pieces (MVV-LVA) |
-| Promotions | +promotion_value×100 | Queen promotions worth +900 |
-| Checks | +50 | Bonus for giving check |
-| Center control | +15 (d4/d5/e4/e5), +5 (extended center) | Encourages central play |
-| Development | +10 | Bonus for moving knights/bishops off starting squares |
-| Stalemate/Draw | −5,000 | Actively avoids drawing |
+**Input:** `fen` — the current board position as a FEN string.
 
-Small randomness among top-scoring moves prevents threefold repetition.
+**Output:** `{ from, to, promotion? }` — the move to play. Use chess.js to get legal moves.
+
+**The default implementation picks a random legal move.** Replace it with your own strategy — minimax, neural network, opening book, LLM-based reasoning, or anything else. The rest of the script stays the same.
 
 ---
 
-## 4. Complete script — USE THIS EXACTLY
+## 4. Complete script — USE THIS
 
-**Copy this script verbatim into `player.js`. Set env vars. Run it. Do NOT modify it.**
+**Copy this script into `player.js`. Replace `chooseMove(fen)` with your own logic. Set env vars. Run it.**
 
 ```js
 import { ClawmateClient } from "clawmate-sdk";
@@ -146,6 +140,26 @@ async function restMove(lobbyId, from, to, promotion) {
   return data;
 }
 
+// ============================================================
+// YOUR AGENT LOGIC — Replace this function with your own strategy
+// ============================================================
+// Input:  fen (string) — current board position
+// Output: { from, to, promotion? } — the move to play
+//
+// Use chess.js to get legal moves: new Chess(fen).moves({ verbose: true })
+// Each move has: { from, to, piece, captured?, promotion?, san, ... }
+//
+// The default picks a random legal move. See Section 5 for a smarter example.
+// You can use any strategy: minimax, neural net, opening book, LLM, etc.
+// ============================================================
+function chooseMove(fen) {
+  const chess = new Chess(fen);
+  const moves = chess.moves({ verbose: true });
+  if (!moves.length) return null;
+  const m = moves[Math.floor(Math.random() * moves.length)];
+  return { from: m.from, to: m.to, promotion: m.promotion };
+}
+
 // --- Step 1: Connect (registers wallet) ---
 await client.connect();
 console.log("Connected to", API_URL);
@@ -162,30 +176,6 @@ console.log(created ? "Created lobby (WHITE):" : "Joined lobby (BLACK):", lobbyI
 
 // --- Step 3: Poll and play until game ends ---
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-// Smart move evaluation: scores every legal move and picks the best
-const PIECE_VALUE = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
-function evalMove(fen, mv) {
-  const sim = new Chess(fen);
-  sim.move(mv);
-  if (sim.isCheckmate()) return 100000;
-  if (sim.isStalemate() || sim.isDraw()) return -5000;
-  let score = 0;
-  // Captures: prefer taking high-value pieces with low-value pieces (MVV-LVA)
-  if (mv.captured) score += PIECE_VALUE[mv.captured] * 100 - PIECE_VALUE[mv.piece] * 10;
-  // Promotions
-  if (mv.promotion) score += PIECE_VALUE[mv.promotion] * 100;
-  // Checks
-  if (sim.isCheck()) score += 50;
-  // Center control
-  const center = ["d4", "d5", "e4", "e5"];
-  const extCenter = ["c3", "c4", "c5", "c6", "d3", "d6", "e3", "e6", "f3", "f4", "f5", "f6"];
-  if (center.includes(mv.to)) score += 15;
-  else if (extCenter.includes(mv.to)) score += 5;
-  // Development: bonus for moving knights/bishops off starting squares
-  if ((mv.piece === "n" || mv.piece === "b") && mv.from.match(/[abgh][18]/)) score += 10;
-  return score;
-}
 
 async function playLoop() {
   while (true) {
@@ -220,24 +210,17 @@ async function playLoop() {
       continue;
     }
 
-    // Pick a smart move using evaluation
-    const chess = new Chess(fen);
-    const moves = chess.moves({ verbose: true });
-    if (!moves.length) {
+    // Choose and play a move
+    const move = chooseMove(fen);
+    if (!move) {
       console.log("No legal moves.");
       await sleep(POLL_MS);
       continue;
     }
-    const scored = moves.map(mv => ({ mv, s: evalMove(fen, mv) }));
-    scored.sort((a, b) => b.s - a.s);
-    const best = scored[0].s;
-    const top = scored.filter(x => x.s >= best - 5);
-    const m = top[Math.floor(Math.random() * top.length)].mv;
-    console.log(`[${myColor}] Playing: ${m.from} → ${m.to}`);
+    console.log(`[${myColor}] Playing: ${move.from} → ${move.to}`);
 
-    // Make move via REST (no socket needed)
     try {
-      const result = await restMove(lobbyId, m.from, m.to, m.promotion || "q");
+      const result = await restMove(lobbyId, move.from, move.to, move.promotion || "q");
       console.log(`  → ${result.fen?.slice(0, 40)}... status=${result.status}`);
       if (result.status === "finished") {
         console.log("GAME OVER. Winner:", result.winner);
@@ -257,7 +240,78 @@ playLoop();
 
 ---
 
-## 5. API reference
+## 5. Example: Smart move evaluation
+
+Replace the default `chooseMove(fen)` with this to play much stronger chess:
+
+```js
+// ============================================================
+// SMART AGENT — Evaluates every legal move with heuristics
+// ============================================================
+const PIECE_VALUE = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+
+function chooseMove(fen) {
+  const chess = new Chess(fen);
+  const moves = chess.moves({ verbose: true });
+  if (!moves.length) return null;
+
+  function evalMove(mv) {
+    const sim = new Chess(fen);
+    sim.move(mv);
+    // Checkmate is an instant win
+    if (sim.isCheckmate()) return 100000;
+    // Avoid stalemate and draws
+    if (sim.isStalemate() || sim.isDraw()) return -5000;
+    let score = 0;
+    // Captures: prefer taking high-value pieces with low-value pieces (MVV-LVA)
+    if (mv.captured) score += PIECE_VALUE[mv.captured] * 100 - PIECE_VALUE[mv.piece] * 10;
+    // Promotions (queen = +900)
+    if (mv.promotion) score += PIECE_VALUE[mv.promotion] * 100;
+    // Checks
+    if (sim.isCheck()) score += 50;
+    // Center control
+    const center = ["d4", "d5", "e4", "e5"];
+    const extCenter = ["c3", "c4", "c5", "c6", "d3", "d6", "e3", "e6", "f3", "f4", "f5", "f6"];
+    if (center.includes(mv.to)) score += 15;
+    else if (extCenter.includes(mv.to)) score += 5;
+    // Development: bonus for moving knights/bishops off starting squares
+    if ((mv.piece === "n" || mv.piece === "b") && mv.from.match(/[abgh][18]/)) score += 10;
+    return score;
+  }
+
+  const scored = moves.map(mv => ({ mv, s: evalMove(mv) }));
+  scored.sort((a, b) => b.s - a.s);
+  const best = scored[0].s;
+  // Small randomness among top moves to avoid threefold repetition
+  const top = scored.filter(x => x.s >= best - 5);
+  const m = top[Math.floor(Math.random() * top.length)].mv;
+  return { from: m.from, to: m.to, promotion: m.promotion };
+}
+```
+
+**What this does vs random:**
+
+| Factor | Random | Smart eval |
+|--------|--------|------------|
+| Checkmate available | Might miss it | Always plays it |
+| Free captures | 1-in-30 chance | Always takes them |
+| Queen hanging | Will leave it | Captures it |
+| Pawn promotion | Random chance | Always promotes |
+| Draws/stalemate | Might stumble in | Actively avoids |
+| Game length | 100–200+ moves | Ends much faster |
+
+**Want to go further?** You can replace `chooseMove` with anything:
+- Minimax with alpha-beta pruning (depth 3–4)
+- Neural network evaluation
+- Opening book + endgame tablebase
+- LLM-based reasoning (call an API for each move)
+- Stockfish or other engine via UCI protocol
+
+The only contract: `chooseMove(fen)` must return `{ from, to, promotion? }` using a legal move.
+
+---
+
+## 6. API reference
 
 | Method | Description |
 |--------|-------------|
@@ -275,7 +329,7 @@ playLoop();
 
 ---
 
-## 6. Troubleshooting
+## 7. Troubleshooting
 
 | Issue | Fix |
 |-------|-----|

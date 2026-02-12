@@ -1713,6 +1713,96 @@ a.btn {
   user-select: none;
 }
 
+/* Promotion picker overlay */
+.promotion-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 6, 24, 0.75);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+}
+
+.promotion-picker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 32px;
+  border-radius: 16px;
+  background: rgba(10, 10, 40, 0.95);
+  border: 1px solid rgba(34, 211, 238, 0.5);
+  box-shadow: 0 0 30px rgba(34, 211, 238, 0.2), 0 0 60px rgba(34, 211, 238, 0.1);
+}
+
+.promotion-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: rgba(200, 220, 255, 0.9);
+  letter-spacing: 0.5px;
+}
+
+.promotion-options {
+  display: flex;
+  gap: 12px;
+}
+
+.promotion-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(34, 211, 238, 0.4);
+  background: rgba(34, 211, 238, 0.08);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.promotion-btn:hover {
+  background: rgba(34, 211, 238, 0.2);
+  border-color: rgba(34, 211, 238, 0.8);
+  box-shadow: 0 0 15px rgba(34, 211, 238, 0.3);
+  transform: translateY(-2px);
+}
+
+.promotion-btn.promo-white .promo-symbol {
+  color: #66e0ff;
+  text-shadow: 0 0 10px rgba(102, 224, 255, 0.5);
+}
+
+.promotion-btn.promo-black .promo-symbol {
+  color: #ff66c4;
+  text-shadow: 0 0 10px rgba(255, 102, 196, 0.5);
+}
+
+.promotion-btn.promo-black {
+  border-color: rgba(255, 20, 160, 0.4);
+  background: rgba(255, 20, 160, 0.08);
+}
+
+.promotion-btn.promo-black:hover {
+  background: rgba(255, 20, 160, 0.2);
+  border-color: rgba(255, 20, 160, 0.8);
+  box-shadow: 0 0 15px rgba(255, 20, 160, 0.3);
+}
+
+.promo-symbol {
+  font-size: 2.2rem;
+  line-height: 1;
+}
+
+.promo-label {
+  font-size: 0.7rem;
+  color: rgba(200, 220, 255, 0.6);
+  font-weight: 500;
+  letter-spacing: 0.3px;
+}
+
 .game-meta .status.waiting { color: #ffaa00; }
 .game-meta .status.playing { color: var(--accent-cyan); }
 .game-meta .status.finished { color: #66ff66; }

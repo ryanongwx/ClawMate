@@ -564,8 +564,18 @@ function CameraRig({ disabled }) {
   return null;
 }
 
+/* -------------------------------------------------- Promotion helpers */
+/** Check if a move from `from` to `to` is a pawn promotion. */
+function isPromotionMove(fen, from, to) {
+  try {
+    const chess = new Chess(fen);
+    const moves = chess.moves({ square: from, verbose: true });
+    return moves.some((m) => m.to === to && m.promotion);
+  } catch { return false; }
+}
+
 /* -------------------------------------------------- Main scene */
-function ChessScene({ fen, orientation, onMove, disabled, isTestGame }) {
+function ChessScene({ fen, orientation, onMove, disabled, isTestGame, onPromotionPending }) {
   const safeFen = typeof fen === "string" && fen.length > 0 && fen !== "start" ? fen : START_FEN;
   const pieces = useMemo(() => fenToPieces(safeFen), [safeFen]);
   const captured = useMemo(() => getCapturedPieces(safeFen), [safeFen]);
@@ -578,15 +588,27 @@ function ChessScene({ fen, orientation, onMove, disabled, isTestGame }) {
     setPossibleMoves([]);
   }, [safeFen]);
 
+  /** Attempt to play a move; if promotion, defer to the overlay. */
+  const tryMove = useCallback((from, to) => {
+    if (isPromotionMove(safeFen, from, to)) {
+      // Show promotion picker — the parent will call onMove with the chosen piece
+      onPromotionPending?.({ from, to });
+      setSelectedSquare(null);
+      setPossibleMoves([]);
+      return;
+    }
+    onMove(from, to, "q");
+    setSelectedSquare(null);
+    setPossibleMoves([]);
+  }, [safeFen, onMove, onPromotionPending]);
+
   const handlePieceClick = useCallback((piece) => {
     if (!canMove) return;
     const chess = new Chess(safeFen);
     const turn = chess.turn();
     // If a piece is selected and we click on an enemy piece in possible moves (capture)
     if (selectedSquare && possibleMoves.includes(piece.square)) {
-      onMove(selectedSquare, piece.square, "q");
-      setSelectedSquare(null);
-      setPossibleMoves([]);
+      tryMove(selectedSquare, piece.square);
       return;
     }
     // Select own piece
@@ -594,20 +616,18 @@ function ChessScene({ fen, orientation, onMove, disabled, isTestGame }) {
     const moves = chess.moves({ square: piece.square, verbose: true });
     setSelectedSquare(piece.square);
     setPossibleMoves(moves.map((m) => m.to));
-  }, [canMove, safeFen, selectedSquare, possibleMoves, onMove, isTestGame]);
+  }, [canMove, safeFen, selectedSquare, possibleMoves, tryMove, isTestGame]);
 
   const handleSquareClick = useCallback((file, rank) => {
     const sq = fileRankToSquare(file, rank);
     if (!canMove) return;
     if (selectedSquare && possibleMoves.includes(sq)) {
-      onMove(selectedSquare, sq, "q");
-      setSelectedSquare(null);
-      setPossibleMoves([]);
+      tryMove(selectedSquare, sq);
       return;
     }
     setSelectedSquare(null);
     setPossibleMoves([]);
-  }, [canMove, selectedSquare, possibleMoves, onMove]);
+  }, [canMove, selectedSquare, possibleMoves, tryMove]);
 
   const possibleSet = useMemo(() => new Set(possibleMoves), [possibleMoves]);
   const selectedFR = selectedSquare ? squareToFileRank(selectedSquare) : null;
@@ -661,8 +681,60 @@ function ChessScene({ fen, orientation, onMove, disabled, isTestGame }) {
   );
 }
 
+/* -------------------------------------------------- Promotion picker overlay */
+const PROMO_PIECES = [
+  { key: "q", label: "Queen", symbol: "♛" },
+  { key: "r", label: "Rook", symbol: "♜" },
+  { key: "b", label: "Bishop", symbol: "♝" },
+  { key: "n", label: "Knight", symbol: "♞" },
+];
+
+function PromotionPicker({ onSelect, onCancel, color }) {
+  return (
+    <div className="promotion-overlay" onClick={onCancel}>
+      <div className="promotion-picker" onClick={(e) => e.stopPropagation()}>
+        <p className="promotion-title">Promote to:</p>
+        <div className="promotion-options">
+          {PROMO_PIECES.map(({ key, label, symbol }) => (
+            <button
+              key={key}
+              type="button"
+              className={`promotion-btn ${color === "w" ? "promo-white" : "promo-black"}`}
+              onClick={() => onSelect(key)}
+              title={label}
+            >
+              <span className="promo-symbol">{symbol}</span>
+              <span className="promo-label">{label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* -------------------------------------------------- Exported component */
 export default function ThreeChessBoard({ gameId, fen, onMove, orientation = "white", disabled, isTestGame }) {
+  const [pendingPromotion, setPendingPromotion] = useState(null);
+
+  const handlePromotionPending = useCallback((move) => {
+    setPendingPromotion(move);
+  }, []);
+
+  const handlePromotionSelect = useCallback((piece) => {
+    if (pendingPromotion) {
+      onMove(pendingPromotion.from, pendingPromotion.to, piece);
+      setPendingPromotion(null);
+    }
+  }, [pendingPromotion, onMove]);
+
+  const handlePromotionCancel = useCallback(() => {
+    setPendingPromotion(null);
+  }, []);
+
+  // Determine turn color for styling the promotion picker
+  const turnColor = typeof fen === "string" ? (fen.split(" ")[1] || "w") : "w";
+
   return (
     <div className="three-chess-container">
       <Canvas
@@ -688,8 +760,18 @@ export default function ThreeChessBoard({ gameId, fen, onMove, orientation = "wh
           onMove={onMove}
           disabled={disabled}
           isTestGame={isTestGame}
+          onPromotionPending={handlePromotionPending}
         />
       </Canvas>
+
+      {pendingPromotion && (
+        <PromotionPicker
+          onSelect={handlePromotionSelect}
+          onCancel={handlePromotionCancel}
+          color={turnColor}
+        />
+      )}
+
       <div className="three-chess-hint">
         {disabled ? "Spectating" : "Click piece, then target · Drag to rotate view"}
       </div>
