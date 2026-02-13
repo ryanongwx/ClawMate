@@ -21,6 +21,7 @@ function serializeLobby(lobby) {
     status: lobby.status || "waiting",
     winner: lobby.winner ?? null,
     drawReason: lobby.drawReason ?? null,
+    finishReason: lobby.finishReason ?? null,
     whiteTimeSec: lobby.whiteTimeSec ?? null,
     blackTimeSec: lobby.blackTimeSec ?? null,
     createdAt: lobby.createdAt ?? Date.now(),
@@ -243,6 +244,66 @@ export async function saveLobby(lobby) {
       console.error("[store] saveLobby (Redis) failed", lobby.lobbyId, e.message);
     }
   }
+}
+
+/**
+ * Find lobbies where the given wallet is player1 or player2 and status is finished or cancelled.
+ * Used for the History tab. Returns raw lobby data (no Chess instance), newest first.
+ * @param {string} wallet - Wallet address (case-insensitive match)
+ * @param {number} limit - Max number of lobbies to return (default 100)
+ * @returns {Promise<object[]>}
+ */
+export async function findLobbiesByWallet(wallet, limit = 100) {
+  if (!wallet || typeof wallet !== "string") return [];
+  const w = wallet.toLowerCase();
+
+  if (storeMode === "mongo" && mongoCollection) {
+    try {
+      const escaped = wallet.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const re = new RegExp(`^${escaped}$`, "i");
+      const cursor = mongoCollection.find({
+        $or: [
+          { player1Wallet: re },
+          { player2Wallet: re },
+        ],
+        status: { $in: ["finished", "cancelled"] },
+      }).sort({ createdAt: -1 }).limit(limit);
+      const list = [];
+      for await (const doc of cursor) {
+        list.push({ ...doc, _id: undefined });
+      }
+      return list;
+    } catch (e) {
+      console.warn("[store] findLobbiesByWallet (MongoDB) failed", e.message);
+      return [];
+    }
+  }
+
+  if (storeMode === "redis" && redis) {
+    try {
+      const ids = await redis.smembers(REDIS_IDS_KEY);
+      const list = [];
+      for (const id of ids) {
+        const raw = await redis.get(REDIS_PREFIX + id);
+        if (!raw) continue;
+        try {
+          const data = JSON.parse(raw);
+          if (data.status !== "finished" && data.status !== "cancelled") continue;
+          const p1 = (data.player1Wallet || "").toLowerCase();
+          const p2 = (data.player2Wallet || "").toLowerCase();
+          if (p1 !== w && p2 !== w) continue;
+          list.push(data);
+        } catch (_) {}
+      }
+      list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      return list.slice(0, limit);
+    } catch (e) {
+      console.warn("[store] findLobbiesByWallet (Redis) failed", e.message);
+      return [];
+    }
+  }
+
+  return [];
 }
 
 /** For backward compatibility and cleanup; prefer loadLobbies. */

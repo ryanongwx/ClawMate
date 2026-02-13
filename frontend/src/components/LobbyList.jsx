@@ -25,6 +25,7 @@ function getTurnCount(fen) {
 const TAB_OPEN = "open";
 const TAB_LIVE = "live";
 const TAB_LEADERBOARD = "leaderboard";
+const TAB_HISTORY = "history";
 
 export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLobby, onCreateClick, onSpectate, activeTab: activeTabProp, onTabChange }) {
   const [internalTab, setInternalTab] = useState(TAB_OPEN);
@@ -47,10 +48,10 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
   const [cancelError, setCancelError] = useState(null);
   const [failedCancelLobby, setFailedCancelLobby] = useState(null); // lobby that failed on-chain cancel, so we can offer "Remove from list anyway"
   const [contractCancelReason, setContractCancelReason] = useState(null); // reason from reading contract state after cancel failed
-  const [claimingRefund, setClaimingRefund] = useState(false);
-  const [refundGameId, setRefundGameId] = useState("");
+  const [historyLobbies, setHistoryLobbies] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [claimingRefundId, setClaimingRefundId] = useState(null); // contractGameId being claimed
   const [refundError, setRefundError] = useState(null);
-  const [refundSuccess, setRefundSuccess] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,6 +97,25 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
     const t = setInterval(load, 10000);
     return () => { cancelled = true; clearInterval(t); };
   }, []);
+
+  const loadHistory = async () => {
+    if (!wallet) return;
+    setHistoryLoading(true);
+    setRefundError(null);
+    try {
+      const res = await api(`/api/lobbies/history?wallet=${encodeURIComponent(wallet)}`);
+      const data = await res.json();
+      setHistoryLobbies(data.lobbies || []);
+    } catch (_) {
+      setHistoryLobbies([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (wallet && activeTab === TAB_HISTORY) loadHistory();
+  }, [wallet, activeTab]);
 
   // Your active games (playing, you are player1 or player2) — show in Open tab so you can rejoin without relying on banner/localStorage
   const myActiveGames = (liveGames || []).filter(
@@ -249,29 +269,23 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
     }
   };
 
-  const claimRefund = async () => {
-    if (!refundGameId || !wallet || !hasEscrow()) return;
-    const gameId = parseInt(refundGameId.trim(), 10);
-    if (Number.isNaN(gameId) || gameId < 1) {
-      setRefundError("Invalid game ID. Enter a number (e.g. 58)");
-      return;
-    }
-    setClaimingRefund(true);
+  const claimRefund = async (contractGameId) => {
+    if (contractGameId == null || !wallet || !hasEscrow()) return;
+    const gameId = typeof contractGameId === "number" ? contractGameId : parseInt(contractGameId, 10);
+    if (Number.isNaN(gameId) || gameId < 1) return;
+    setClaimingRefundId(gameId);
     setRefundError(null);
-    setRefundSuccess(false);
     try {
       const ok = await cancelLobbyOnChain(gameId);
       if (ok) {
-        setRefundSuccess(true);
-        setRefundGameId("");
-        setTimeout(() => setRefundSuccess(false), 5000);
+        await loadHistory();
       } else {
         setRefundError("Transaction failed or was rejected");
       }
     } catch (e) {
       setRefundError(e?.message || e?.reason || "Failed to claim refund");
     } finally {
-      setClaimingRefund(false);
+      setClaimingRefundId(null);
     }
   };
 
@@ -305,6 +319,15 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
         >
           Leaderboard
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === TAB_HISTORY}
+          className={`lobby-tab ${activeTab === TAB_HISTORY ? "active" : ""}`}
+          onClick={() => setActiveTab(TAB_HISTORY)}
+        >
+          History
+        </button>
       </div>
 
       {activeTab === TAB_OPEN && (
@@ -330,44 +353,6 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
               </button>
             </div>
           </div>
-
-          {hasEscrow() && wallet && (
-            <div className="lobby-refund-card">
-              <h3 className="lobby-refund-title">Claim refund for cancelled lobby</h3>
-              <p className="lobby-refund-hint">
-                If your lobby was auto-cancelled (no opponent joined within 30 minutes), your bet is still in the escrow contract. Enter your game ID to claim your refund.
-              </p>
-              <div className="lobby-refund-form">
-                <input
-                  type="number"
-                  className="lobby-refund-input"
-                  placeholder="Game ID (e.g. 58)"
-                  value={refundGameId}
-                  onChange={(e) => {
-                    setRefundGameId(e.target.value);
-                    setRefundError(null);
-                    setRefundSuccess(false);
-                  }}
-                  disabled={claimingRefund}
-                  min="1"
-                />
-                <button
-                  type="button"
-                  className="btn btn-claim-refund"
-                  onClick={claimRefund}
-                  disabled={claimingRefund || !refundGameId.trim()}
-                >
-                  {claimingRefund ? "Claiming…" : "Claim refund"}
-                </button>
-              </div>
-              {refundError && (
-                <p className="lobby-refund-error" role="alert">{refundError}</p>
-              )}
-              {refundSuccess && (
-                <p className="lobby-refund-success" role="alert">✓ Refund claimed successfully! Check your wallet.</p>
-              )}
-            </div>
-          )}
 
           {(joinError || cancelError) && (
             <div className="lobby-error" role="alert">
@@ -612,6 +597,89 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
                 </tbody>
               </table>
             </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === TAB_HISTORY && (
+        <div className="lobby-history-section">
+          <p className="lobby-live-subtitle">Your past games and cancelled lobbies</p>
+          {refundError && (
+            <div className="lobby-error" role="alert">
+              <p className="lobby-error-text">{refundError}</p>
+              <button type="button" className="btn btn-ghost" onClick={() => setRefundError(null)}>Dismiss</button>
+            </div>
+          )}
+          {!wallet ? (
+            <div className="lobby-empty">
+              <span className="lobby-empty-icon">🔐</span>
+              <p className="lobby-empty-title">Connect wallet</p>
+              <p className="lobby-empty-desc">Connect your wallet to see your game history.</p>
+            </div>
+          ) : historyLoading ? (
+            <div className="lobby-empty">
+              <span className="lobby-empty-icon">⋯</span>
+              <p className="lobby-empty-title">Loading history</p>
+            </div>
+          ) : historyLobbies.length === 0 ? (
+            <div className="lobby-empty">
+              <span className="lobby-empty-icon">♟</span>
+              <p className="lobby-empty-title">No history yet</p>
+              <p className="lobby-empty-desc">Finished and cancelled games will appear here.</p>
+            </div>
+          ) : (
+            <ul className="lobby-cards lobby-cards-history">
+              {historyLobbies.map((l) => {
+                const isP1 = l.player1Wallet?.toLowerCase() === wallet?.toLowerCase();
+                const opponent = isP1 ? l.player2Wallet : l.player1Wallet;
+                const shortOpp = opponent ? `${opponent.slice(0, 6)}…${opponent.slice(-4)}` : "—";
+                const result =
+                  l.status === "cancelled"
+                    ? "Cancelled"
+                    : l.winner === "draw"
+                      ? "Draw"
+                      : (l.winner === "white" && isP1) || (l.winner === "black" && !isP1)
+                        ? "Won"
+                        : "Lost";
+                const canClaimRefund =
+                  l.status === "cancelled" &&
+                  hasEscrow() &&
+                  l.contractGameId != null &&
+                  (l.player1Wallet?.toLowerCase() === wallet?.toLowerCase());
+                const createdAt = l.createdAt != null ? new Date(l.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
+                return (
+                  <li key={l.lobbyId} className={`lobby-card lobby-card-history lobby-card-${l.status}`}>
+                    <span className="lobby-card-icon">♟</span>
+                    <div className="lobby-card-body">
+                      <span className="lobby-card-bet">Bet: {betWeiToMon(l.betAmount)} MON</span>
+                      <span className="lobby-card-creator">
+                        vs {shortOpp}
+                      </span>
+                      <span className="lobby-card-meta">{createdAt}</span>
+                      <span className={`lobby-card-result lobby-card-result-${result.toLowerCase()}`}>
+                        {result}
+                        {l.status === "finished" && l.finishReason && result !== "Draw" && (
+                          <span className="lobby-card-reason"> · {l.finishReason}</span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="lobby-card-actions">
+                      {canClaimRefund && (
+                        <button
+                          type="button"
+                          className="btn btn-claim-refund"
+                          onClick={() => claimRefund(l.contractGameId)}
+                          disabled={claimingRefundId === l.contractGameId}
+                          title="Get your bet back from the escrow contract"
+                        >
+                          {claimingRefundId === l.contractGameId ? "Claiming…" : "Claim refund"}
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </div>
       )}

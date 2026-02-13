@@ -7,7 +7,7 @@ import rateLimit from "express-rate-limit";
 import { verifyMessage } from "ethers";
 import { v4 as uuidv4 } from "uuid";
 import { Chess } from "chess.js";
-import { initStore, loadLobbies, saveLobby, getLobbyFromStore, hydrateLobby, findWaitingLobbyByCreator, loadProfiles, getProfile, setProfile } from "./store.js";
+import { initStore, loadLobbies, saveLobby, getLobbyFromStore, hydrateLobby, findWaitingLobbyByCreator, findLobbiesByWallet, loadProfiles, getProfile, setProfile } from "./store.js";
 import { isProfane } from "./profanity.js";
 
 const ts = () => new Date().toISOString();
@@ -330,6 +330,56 @@ app.post("/api/lobbies", async (req, res) => {
     response.warning = "This is a 0-bet game. If you intended a wager, you MUST pass betMon AND contractAddress to joinOrCreateLobby. See https://clawmate.onrender.com/skill.md";
   }
   res.status(201).json(response);
+});
+
+// History: lobbies where wallet is player1 or player2, status finished or cancelled (must be before /:lobbyId)
+app.get("/api/lobbies/history", async (req, res) => {
+  const wallet = (req.query.wallet || "").trim();
+  if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
+    return res.status(400).json({ error: "Valid wallet query required" });
+  }
+  const w = wallet.toLowerCase();
+  const limit = Math.min(parseInt(req.query.limit, 10) || 100, 200);
+
+  const fromStore = await findLobbiesByWallet(w, limit);
+  const inMemory = Array.from(lobbies.values()).filter(
+    (l) => (l.status === "finished" || l.status === "cancelled") &&
+      (l.player1Wallet?.toLowerCase() === w || l.player2Wallet?.toLowerCase() === w)
+  );
+  const seen = new Set(fromStore.map((x) => x.lobbyId));
+  for (const l of inMemory) {
+    if (!seen.has(l.lobbyId)) {
+      seen.add(l.lobbyId);
+      fromStore.push({
+        lobbyId: l.lobbyId,
+        contractGameId: l.contractGameId ?? null,
+        betAmount: l.betAmount,
+        player1Wallet: l.player1Wallet,
+        player2Wallet: l.player2Wallet,
+        fen: l.fen,
+        status: l.status,
+        winner: l.winner,
+        drawReason: l.drawReason ?? null,
+        finishReason: l.finishReason ?? null,
+        createdAt: l.createdAt ?? Date.now(),
+      });
+    }
+  }
+  fromStore.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const list = fromStore.slice(0, limit).map((l) => ({
+    lobbyId: l.lobbyId,
+    contractGameId: l.contractGameId,
+    betAmount: l.betAmount,
+    player1Wallet: l.player1Wallet,
+    player2Wallet: l.player2Wallet,
+    status: l.status,
+    winner: l.winner,
+    drawReason: l.drawReason ?? null,
+    finishReason: l.finishReason ?? null,
+    createdAt: l.createdAt,
+  }));
+  log("GET /api/lobbies/history", { wallet: w.slice(0, 10) + "…", count: list.length });
+  res.json({ lobbies: list });
 });
 
 app.get("/api/lobbies", async (req, res) => {
