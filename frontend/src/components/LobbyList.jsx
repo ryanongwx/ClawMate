@@ -4,6 +4,25 @@ import { api } from "../lib/api";
 import { hasEscrow, joinLobbyOnChain, cancelLobbyOnChain, getGameStateOnChain, getContractBalance } from "../lib/escrow";
 import { signJoinLobby, signCancelLobby } from "../lib/auth";
 
+const REFUND_CLAIMED_STORAGE_KEY = "clawmate_refund_claimed";
+
+function loadRefundClaimedIds() {
+  try {
+    const raw = localStorage.getItem(REFUND_CLAIMED_STORAGE_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr.map((id) => Number(id)).filter((n) => !Number.isNaN(n) && n > 0) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveRefundClaimedIds(ids) {
+  try {
+    localStorage.setItem(REFUND_CLAIMED_STORAGE_KEY, JSON.stringify([...ids]));
+  } catch (_) {}
+}
+
 function betWeiToMon(weiStr) {
   if (!weiStr || weiStr === "0") return "0";
   try {
@@ -53,7 +72,7 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
   const [claimingRefundId, setClaimingRefundId] = useState(null);
   const [refundError, setRefundError] = useState(null);
   const [refundSuccessId, setRefundSuccessId] = useState(null);
-  const [refundClaimedLobbyIds, setRefundClaimedLobbyIds] = useState(() => new Set());
+  const [refundClaimedContractGameIds, setRefundClaimedContractGameIds] = useState(() => loadRefundClaimedIds());
 
   useEffect(() => {
     let cancelled = false;
@@ -281,7 +300,11 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
     try {
       const ok = await cancelLobbyOnChain(gameId);
       if (ok) {
-        setRefundClaimedLobbyIds((prev) => new Set(prev).add(lobbyId));
+        setRefundClaimedContractGameIds((prev) => {
+          const next = new Set(prev).add(gameId);
+          saveRefundClaimedIds(next);
+          return next;
+        });
         setRefundSuccessId(lobbyId);
         setTimeout(() => setRefundSuccessId(null), 5000);
       } else {
@@ -614,7 +637,8 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
                   }
 
                   const canRefund = isCancelled && hasEscrow() && l.contractGameId != null;
-                  const refundAlreadyClaimed = refundClaimedLobbyIds.has(l.lobbyId);
+                  const contractId = l.contractGameId != null ? Number(l.contractGameId) : null;
+                  const refundAlreadyClaimed = contractId != null && refundClaimedContractGameIds.has(contractId);
 
                   const resultIcon =
                     resultClass === "history-won" ? "♔" : resultClass === "history-lost" ? "♟" : resultClass === "history-draw" ? "=" : "⊗";
