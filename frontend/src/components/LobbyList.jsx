@@ -613,21 +613,29 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
 
                   const canRefund = isCancelled && hasEscrow() && l.contractGameId != null;
 
+                  const resultIcon =
+                    resultClass === "history-won" ? "♔" : resultClass === "history-lost" ? "♟" : resultClass === "history-draw" ? "=" : "⊗";
+
                   return (
                     <li key={l.lobbyId} className={`lobby-card lobby-card-history ${resultClass}`}>
-                      <span className="lobby-card-icon">♟</span>
-                      <div className="lobby-card-body">
-                        <span className="lobby-card-bet">Bet: {betWeiToMon(l.betAmount)} MON</span>
-                        <span className="lobby-card-creator">
+                      <div className="history-card-accent" aria-hidden />
+                      <span className="history-card-icon" aria-hidden>{resultIcon}</span>
+                      <div className="lobby-card-body history-card-body">
+                        <div className="history-card-top">
+                          <span className="lobby-card-bet history-card-bet">{betWeiToMon(l.betAmount)} MON</span>
+                          {l.contractGameId != null && (
+                            <span className="history-game-id">#{l.contractGameId}</span>
+                          )}
+                        </div>
+                        <span className="lobby-card-creator history-card-opponent">
                           vs {opponentWallet ? `${opponentWallet.slice(0, 6)}…${opponentWallet.slice(-4)}` : "No opponent"}
                         </span>
-                        <span className={`history-result-label ${resultClass}`}>{resultLabel}</span>
-                        {reasonLabel && <span className="history-reason-label">{reasonLabel}</span>}
-                        {l.contractGameId != null && (
-                          <span className="history-game-id">Game #{l.contractGameId}</span>
-                        )}
+                        <div className="history-card-meta">
+                          <span className={`history-result-label ${resultClass}`}>{resultLabel}</span>
+                          {reasonLabel && <span className="history-reason-label">{reasonLabel}</span>}
+                        </div>
                       </div>
-                      <div className="lobby-card-actions">
+                      <div className="lobby-card-actions history-card-actions">
                         {canRefund && refundSuccessId !== l.lobbyId && (
                           <button
                             type="button"

@@ -860,78 +860,202 @@ a.btn {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 .lobby-card-history {
-  border-left: 3px solid rgba(200, 220, 255, 0.2);
+  position: relative;
+  padding: 20px 24px 20px 28px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(135deg, rgba(20, 20, 45, 0.85) 0%, rgba(12, 12, 28, 0.9) 100%);
+  backdrop-filter: blur(8px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.25s ease, border-color 0.2s ease;
 }
 
-.lobby-card-history.history-won {
-  border-left-color: #66ff66;
+.lobby-card-history:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
 }
 
-.lobby-card-history.history-lost {
-  border-left-color: #ff6666;
+/* Colored accent strip + glow */
+.history-card-accent {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 14px 0 0 14px;
+  opacity: 0.9;
 }
 
-.lobby-card-history.history-draw {
-  border-left-color: #ffcc44;
+.lobby-card-history.history-won .history-card-accent {
+  background: linear-gradient(180deg, #66ff66 0%, #22cc66 50%, #0d8c3d 100%);
+  box-shadow: 0 0 20px rgba(102, 255, 102, 0.4);
 }
 
-.lobby-card-history.history-cancelled {
-  border-left-color: rgba(200, 220, 255, 0.35);
+.lobby-card-history.history-lost .history-card-accent {
+  background: linear-gradient(180deg, #ff6666 0%, #cc3333 50%, #991a1a 100%);
+  box-shadow: 0 0 20px rgba(255, 102, 102, 0.35);
+}
+
+.lobby-card-history.history-draw .history-card-accent {
+  background: linear-gradient(180deg, #ffcc44 0%, #e6a820 50%, #b38600 100%);
+  box-shadow: 0 0 18px rgba(255, 204, 68, 0.3);
+}
+
+.lobby-card-history.history-cancelled .history-card-accent {
+  background: linear-gradient(180deg, rgba(200, 220, 255, 0.5) 0%, rgba(140, 160, 200, 0.35) 100%);
+  box-shadow: 0 0 12px rgba(200, 220, 255, 0.15);
+}
+
+/* Result tint on card */
+.lobby-card-history.history-won:hover {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), 0 0 24px rgba(102, 255, 102, 0.08);
+}
+
+.lobby-card-history.history-lost:hover {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), 0 0 24px rgba(255, 102, 102, 0.06);
+}
+
+.lobby-card-history.history-draw:hover {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), 0 0 24px rgba(255, 204, 68, 0.08);
+}
+
+.history-card-icon {
+  font-size: 1.75rem;
+  line-height: 1;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-weight: 700;
+}
+
+.lobby-card-history.history-won .history-card-icon {
+  background: rgba(102, 255, 102, 0.12);
+  color: #66ffaa;
+  text-shadow: 0 0 12px rgba(102, 255, 102, 0.5);
+}
+
+.lobby-card-history.history-lost .history-card-icon {
+  background: rgba(255, 102, 102, 0.1);
+  color: #ff8888;
+  text-shadow: 0 0 10px rgba(255, 102, 102, 0.4);
+}
+
+.lobby-card-history.history-draw .history-card-icon {
+  background: rgba(255, 204, 68, 0.12);
+  color: #ffdd66;
+  font-size: 1.4rem;
+  text-shadow: 0 0 10px rgba(255, 204, 68, 0.35);
+}
+
+.lobby-card-history.history-cancelled .history-card-icon {
+  background: rgba(200, 220, 255, 0.06);
+  color: rgba(200, 220, 255, 0.5);
+}
+
+.history-card-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.history-card-top {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.history-card-bet {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+
+.history-game-id {
+  font-size: 0.72rem;
+  color: rgba(200, 220, 255, 0.4);
+  font-family: "JetBrains Mono", monospace;
+}
+
+.history-card-opponent {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  font-family: "JetBrains Mono", monospace;
+}
+
+.history-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
 }
 
 .history-result-label {
-  display: inline-block;
-  font-size: 0.8rem;
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 2px 8px;
-  border-radius: 4px;
-  margin-top: 4px;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  border-radius: 6px;
 }
 
 .history-result-label.history-won {
   color: #66ff66;
-  background: rgba(102, 255, 102, 0.1);
+  background: rgba(102, 255, 102, 0.15);
+  border: 1px solid rgba(102, 255, 102, 0.35);
 }
 
 .history-result-label.history-lost {
-  color: #ff6666;
-  background: rgba(255, 102, 102, 0.1);
+  color: #ff8888;
+  background: rgba(255, 102, 102, 0.12);
+  border: 1px solid rgba(255, 102, 102, 0.3);
 }
 
 .history-result-label.history-draw {
   color: #ffcc44;
-  background: rgba(255, 204, 68, 0.1);
+  background: rgba(255, 204, 68, 0.12);
+  border: 1px solid rgba(255, 204, 68, 0.3);
 }
 
 .history-result-label.history-cancelled {
-  color: rgba(200, 220, 255, 0.5);
-  background: rgba(200, 220, 255, 0.05);
+  color: rgba(200, 220, 255, 0.6);
+  background: rgba(200, 220, 255, 0.06);
+  border: 1px solid rgba(200, 220, 255, 0.15);
 }
 
 .history-reason-label {
-  display: block;
   font-size: 0.75rem;
   color: rgba(200, 220, 255, 0.5);
-  margin-top: 2px;
 }
 
-.history-game-id {
-  display: block;
-  font-size: 0.7rem;
-  color: rgba(200, 220, 255, 0.35);
-  margin-top: 2px;
+.history-card-actions {
+  flex-shrink: 0;
 }
 
 .history-refund-ok {
   font-size: 0.8rem;
   color: #66ff66;
-  font-weight: 600;
+  font-weight: 700;
+  text-shadow: 0 0 8px rgba(102, 255, 102, 0.4);
 }
 
 .btn-claim-refund {
