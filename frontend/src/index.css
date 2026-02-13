@@ -849,60 +849,94 @@ a.btn {
   justify-content: center;
 }
 
-.lobby-refund-card {
-  padding: 20px 24px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 20, 160, 0.3);
-  background: rgba(255, 20, 160, 0.05);
-  margin-bottom: 32px;
+/* --- History tab --- */
+.history-section {
+  padding: 0 4px;
 }
 
-.lobby-refund-title {
-  margin: 0 0 8px 0;
-  font-size: 1rem;
-  font-weight: 600;
-  color: rgba(255, 20, 160, 0.9);
-}
-
-.lobby-refund-hint {
-  margin: 0 0 16px 0;
-  font-size: 0.85rem;
-  color: rgba(200, 220, 255, 0.6);
-  line-height: 1.5;
-}
-
-.lobby-refund-form {
+.lobby-cards-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
+  flex-direction: column;
   gap: 12px;
-  align-items: center;
 }
 
-.lobby-refund-input {
-  flex: 1;
-  max-width: 200px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 20, 160, 0.4);
-  background: rgba(10, 10, 40, 0.6);
-  color: rgba(200, 220, 255, 0.9);
-  font-size: 0.9rem;
-  font-family: inherit;
+.lobby-card-history {
+  border-left: 3px solid rgba(200, 220, 255, 0.2);
 }
 
-.lobby-refund-input:focus {
-  outline: none;
-  border-color: rgba(255, 20, 160, 0.7);
-  box-shadow: 0 0 10px rgba(255, 20, 160, 0.2);
+.lobby-card-history.history-won {
+  border-left-color: #66ff66;
 }
 
-.lobby-refund-input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.lobby-card-history.history-lost {
+  border-left-color: #ff6666;
+}
+
+.lobby-card-history.history-draw {
+  border-left-color: #ffcc44;
+}
+
+.lobby-card-history.history-cancelled {
+  border-left-color: rgba(200, 220, 255, 0.35);
+}
+
+.history-result-label {
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+
+.history-result-label.history-won {
+  color: #66ff66;
+  background: rgba(102, 255, 102, 0.1);
+}
+
+.history-result-label.history-lost {
+  color: #ff6666;
+  background: rgba(255, 102, 102, 0.1);
+}
+
+.history-result-label.history-draw {
+  color: #ffcc44;
+  background: rgba(255, 204, 68, 0.1);
+}
+
+.history-result-label.history-cancelled {
+  color: rgba(200, 220, 255, 0.5);
+  background: rgba(200, 220, 255, 0.05);
+}
+
+.history-reason-label {
+  display: block;
+  font-size: 0.75rem;
+  color: rgba(200, 220, 255, 0.5);
+  margin-top: 2px;
+}
+
+.history-game-id {
+  display: block;
+  font-size: 0.7rem;
+  color: rgba(200, 220, 255, 0.35);
+  margin-top: 2px;
+}
+
+.history-refund-ok {
+  font-size: 0.8rem;
+  color: #66ff66;
+  font-weight: 600;
 }
 
 .btn-claim-refund {
-  padding: 10px 20px;
-  font-size: 0.9rem;
+  padding: 8px 16px;
+  font-size: 0.8rem;
   background: rgba(255, 20, 160, 0.2);
   border: 1px solid rgba(255, 20, 160, 0.6);
   color: #ff66c4;
@@ -922,71 +956,13 @@ a.btn {
 }
 
 .lobby-refund-error {
-  margin: 12px 0 0 0;
+  margin: 0 0 12px 0;
+  padding: 10px 14px;
   font-size: 0.85rem;
   color: #ff8080;
-}
-
-.lobby-refund-success {
-  margin: 12px 0 0 0;
-  font-size: 0.85rem;
-  color: #66ff66;
-}
-
-.lobby-history-section {
-  padding-top: 8px;
-}
-
-.lobby-cards-history {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.lobby-card-history .lobby-card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.lobby-card-history .lobby-card-meta {
-  font-size: 0.8rem;
-  color: rgba(200, 220, 255, 0.5);
-}
-
-.lobby-card-result {
-  font-size: 0.9rem;
-  font-weight: 600;
-}
-
-.lobby-card-result-won {
-  color: #66ff66;
-}
-
-.lobby-card-result-lost {
-  color: #ff8080;
-}
-
-.lobby-card-result-draw {
-  color: rgba(200, 220, 255, 0.8);
-}
-
-.lobby-card-result-cancelled {
-  color: #ffaa00;
-}
-
-.lobby-card-reason {
-  font-weight: 400;
-  font-size: 0.85rem;
-  color: rgba(200, 220, 255, 0.6);
-}
-
-.lobby-card-history.lobby-card-cancelled {
-  border-color: rgba(255, 170, 0, 0.4);
-  background: rgba(255, 170, 0, 0.06);
+  background: rgba(255, 80, 80, 0.08);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 80, 80, 0.2);
 }
 
 .lobby-btn-icon {

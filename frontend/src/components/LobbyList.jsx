@@ -24,8 +24,8 @@ function getTurnCount(fen) {
 
 const TAB_OPEN = "open";
 const TAB_LIVE = "live";
-const TAB_LEADERBOARD = "leaderboard";
 const TAB_HISTORY = "history";
+const TAB_LEADERBOARD = "leaderboard";
 
 export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLobby, onCreateClick, onSpectate, activeTab: activeTabProp, onTabChange }) {
   const [internalTab, setInternalTab] = useState(TAB_OPEN);
@@ -48,10 +48,11 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
   const [cancelError, setCancelError] = useState(null);
   const [failedCancelLobby, setFailedCancelLobby] = useState(null); // lobby that failed on-chain cancel, so we can offer "Remove from list anyway"
   const [contractCancelReason, setContractCancelReason] = useState(null); // reason from reading contract state after cancel failed
-  const [historyLobbies, setHistoryLobbies] = useState([]);
+  const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [claimingRefundId, setClaimingRefundId] = useState(null); // contractGameId being claimed
+  const [claimingRefundId, setClaimingRefundId] = useState(null);
   const [refundError, setRefundError] = useState(null);
+  const [refundSuccessId, setRefundSuccessId] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,23 +99,23 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
     return () => { cancelled = true; clearInterval(t); };
   }, []);
 
-  const loadHistory = async () => {
-    if (!wallet) return;
-    setHistoryLoading(true);
-    setRefundError(null);
-    try {
-      const res = await api(`/api/lobbies/history?wallet=${encodeURIComponent(wallet)}`);
-      const data = await res.json();
-      setHistoryLobbies(data.lobbies || []);
-    } catch (_) {
-      setHistoryLobbies([]);
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
-
+  // History: load finished + cancelled lobbies for the connected wallet
   useEffect(() => {
-    if (wallet && activeTab === TAB_HISTORY) loadHistory();
+    if (!wallet || activeTab !== TAB_HISTORY) return;
+    let cancelled = false;
+    const load = async () => {
+      setHistoryLoading(true);
+      try {
+        const res = await api(`/api/lobbies/history?wallet=${encodeURIComponent(wallet)}`);
+        const data = await res.json();
+        if (!cancelled) setHistory(data.lobbies || []);
+      } catch (_) {}
+      if (!cancelled) setHistoryLoading(false);
+    };
+    load();
+    // Refresh every 15s while on the history tab
+    const t = setInterval(load, 15000);
+    return () => { cancelled = true; clearInterval(t); };
   }, [wallet, activeTab]);
 
   // Your active games (playing, you are player1 or player2) — show in Open tab so you can rejoin without relying on banner/localStorage
@@ -269,18 +270,20 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
     }
   };
 
-  const claimRefund = async (contractGameId) => {
-    if (contractGameId == null || !wallet || !hasEscrow()) return;
-    const gameId = typeof contractGameId === "number" ? contractGameId : parseInt(contractGameId, 10);
+  const claimRefund = async (lobbyId, contractGameId) => {
+    if (!contractGameId || !wallet || !hasEscrow()) return;
+    const gameId = typeof contractGameId === "number" ? contractGameId : parseInt(String(contractGameId), 10);
     if (Number.isNaN(gameId) || gameId < 1) return;
-    setClaimingRefundId(gameId);
+    setClaimingRefundId(lobbyId);
     setRefundError(null);
+    setRefundSuccessId(null);
     try {
       const ok = await cancelLobbyOnChain(gameId);
       if (ok) {
-        await loadHistory();
+        setRefundSuccessId(lobbyId);
+        setTimeout(() => setRefundSuccessId(null), 5000);
       } else {
-        setRefundError("Transaction failed or was rejected");
+        setRefundError(`Transaction failed for game #${gameId}`);
       }
     } catch (e) {
       setRefundError(e?.message || e?.reason || "Failed to claim refund");
@@ -313,20 +316,20 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
         <button
           type="button"
           role="tab"
-          aria-selected={activeTab === TAB_LEADERBOARD}
-          className={`lobby-tab ${activeTab === TAB_LEADERBOARD ? "active" : ""}`}
-          onClick={() => setActiveTab(TAB_LEADERBOARD)}
-        >
-          Leaderboard
-        </button>
-        <button
-          type="button"
-          role="tab"
           aria-selected={activeTab === TAB_HISTORY}
           className={`lobby-tab ${activeTab === TAB_HISTORY ? "active" : ""}`}
           onClick={() => setActiveTab(TAB_HISTORY)}
         >
           History
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === TAB_LEADERBOARD}
+          className={`lobby-tab ${activeTab === TAB_LEADERBOARD ? "active" : ""}`}
+          onClick={() => setActiveTab(TAB_LEADERBOARD)}
+        >
+          Leaderboard
         </button>
       </div>
 
@@ -544,6 +547,111 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
         </div>
       )}
 
+      {activeTab === TAB_HISTORY && (
+        <div className="history-section">
+          <p className="lobby-live-subtitle">Your finished &amp; cancelled games</p>
+          {!wallet ? (
+            <div className="lobby-empty">
+              <span className="lobby-empty-icon">🔌</span>
+              <p className="lobby-empty-title">Connect your wallet</p>
+              <p className="lobby-empty-desc">Connect a wallet to view your game history.</p>
+            </div>
+          ) : historyLoading && history.length === 0 ? (
+            <div className="lobby-empty">
+              <span className="lobby-empty-icon">⋯</span>
+              <p className="lobby-empty-title">Loading history</p>
+            </div>
+          ) : history.length === 0 ? (
+            <div className="lobby-empty">
+              <span className="lobby-empty-icon">♟</span>
+              <p className="lobby-empty-title">No past games found</p>
+              <p className="lobby-empty-desc">Your finished and cancelled games will appear here.</p>
+            </div>
+          ) : (
+            <>
+              {refundError && (
+                <p className="lobby-refund-error" role="alert">{refundError}</p>
+              )}
+              <ul className="lobby-cards lobby-cards-history">
+                {history.map((l) => {
+                  const isCancelled = l.status === "cancelled";
+                  const isFinished = l.status === "finished";
+                  const w = wallet.toLowerCase();
+                  const isP1 = l.player1Wallet?.toLowerCase() === w;
+                  const myColor = isP1 ? "white" : "black";
+                  const opponentWallet = isP1 ? l.player2Wallet : l.player1Wallet;
+
+                  let resultLabel = "";
+                  let resultClass = "";
+                  if (isCancelled) {
+                    resultLabel = "Cancelled";
+                    resultClass = "history-cancelled";
+                  } else if (l.winner === "draw") {
+                    resultLabel = "Draw";
+                    resultClass = "history-draw";
+                  } else if (l.winner === myColor) {
+                    resultLabel = "Won";
+                    resultClass = "history-won";
+                  } else {
+                    resultLabel = "Lost";
+                    resultClass = "history-lost";
+                  }
+
+                  let reasonLabel = "";
+                  if (isFinished) {
+                    const r = l.finishReason || l.drawReason;
+                    if (r === "checkmate") reasonLabel = "Checkmate";
+                    else if (r === "timeout") reasonLabel = "Timeout";
+                    else if (r === "concede") reasonLabel = "Concession";
+                    else if (r === "agreement") reasonLabel = "By agreement";
+                    else if (r === "stalemate") reasonLabel = "Stalemate";
+                    else if (r === "threefold") reasonLabel = "Threefold repetition";
+                    else if (r === "insufficient") reasonLabel = "Insufficient material";
+                    else if (r === "50-move") reasonLabel = "50-move rule";
+                    else if (r) reasonLabel = r.charAt(0).toUpperCase() + r.slice(1);
+                  }
+
+                  const canRefund = isCancelled && hasEscrow() && l.contractGameId != null;
+
+                  return (
+                    <li key={l.lobbyId} className={`lobby-card lobby-card-history ${resultClass}`}>
+                      <span className="lobby-card-icon">♟</span>
+                      <div className="lobby-card-body">
+                        <span className="lobby-card-bet">Bet: {betWeiToMon(l.betAmount)} MON</span>
+                        <span className="lobby-card-creator">
+                          vs {opponentWallet ? `${opponentWallet.slice(0, 6)}…${opponentWallet.slice(-4)}` : "No opponent"}
+                        </span>
+                        <span className={`history-result-label ${resultClass}`}>{resultLabel}</span>
+                        {reasonLabel && <span className="history-reason-label">{reasonLabel}</span>}
+                        {l.contractGameId != null && (
+                          <span className="history-game-id">Game #{l.contractGameId}</span>
+                        )}
+                      </div>
+                      <div className="lobby-card-actions">
+                        {canRefund && refundSuccessId !== l.lobbyId && (
+                          <button
+                            type="button"
+                            className="btn btn-claim-refund"
+                            onClick={() => claimRefund(l.lobbyId, l.contractGameId)}
+                            disabled={claimingRefundId === l.lobbyId}
+                            title="Claim your bet refund from the escrow contract"
+                          >
+                            {claimingRefundId === l.lobbyId ? "Claiming…" : "Claim refund"}
+                          </button>
+                        )}
+                        {refundSuccessId === l.lobbyId && (
+                          <span className="history-refund-ok">Refunded</span>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
+
       {activeTab === TAB_LEADERBOARD && (
         <div className="leaderboard-section">
           <p className="lobby-live-subtitle">All-time standings by PnL</p>
@@ -597,89 +705,6 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
-      )}
-
-      {activeTab === TAB_HISTORY && (
-        <div className="lobby-history-section">
-          <p className="lobby-live-subtitle">Your past games and cancelled lobbies</p>
-          {refundError && (
-            <div className="lobby-error" role="alert">
-              <p className="lobby-error-text">{refundError}</p>
-              <button type="button" className="btn btn-ghost" onClick={() => setRefundError(null)}>Dismiss</button>
-            </div>
-          )}
-          {!wallet ? (
-            <div className="lobby-empty">
-              <span className="lobby-empty-icon">🔐</span>
-              <p className="lobby-empty-title">Connect wallet</p>
-              <p className="lobby-empty-desc">Connect your wallet to see your game history.</p>
-            </div>
-          ) : historyLoading ? (
-            <div className="lobby-empty">
-              <span className="lobby-empty-icon">⋯</span>
-              <p className="lobby-empty-title">Loading history</p>
-            </div>
-          ) : historyLobbies.length === 0 ? (
-            <div className="lobby-empty">
-              <span className="lobby-empty-icon">♟</span>
-              <p className="lobby-empty-title">No history yet</p>
-              <p className="lobby-empty-desc">Finished and cancelled games will appear here.</p>
-            </div>
-          ) : (
-            <ul className="lobby-cards lobby-cards-history">
-              {historyLobbies.map((l) => {
-                const isP1 = l.player1Wallet?.toLowerCase() === wallet?.toLowerCase();
-                const opponent = isP1 ? l.player2Wallet : l.player1Wallet;
-                const shortOpp = opponent ? `${opponent.slice(0, 6)}…${opponent.slice(-4)}` : "—";
-                const result =
-                  l.status === "cancelled"
-                    ? "Cancelled"
-                    : l.winner === "draw"
-                      ? "Draw"
-                      : (l.winner === "white" && isP1) || (l.winner === "black" && !isP1)
-                        ? "Won"
-                        : "Lost";
-                const canClaimRefund =
-                  l.status === "cancelled" &&
-                  hasEscrow() &&
-                  l.contractGameId != null &&
-                  (l.player1Wallet?.toLowerCase() === wallet?.toLowerCase());
-                const createdAt = l.createdAt != null ? new Date(l.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
-                return (
-                  <li key={l.lobbyId} className={`lobby-card lobby-card-history lobby-card-${l.status}`}>
-                    <span className="lobby-card-icon">♟</span>
-                    <div className="lobby-card-body">
-                      <span className="lobby-card-bet">Bet: {betWeiToMon(l.betAmount)} MON</span>
-                      <span className="lobby-card-creator">
-                        vs {shortOpp}
-                      </span>
-                      <span className="lobby-card-meta">{createdAt}</span>
-                      <span className={`lobby-card-result lobby-card-result-${result.toLowerCase()}`}>
-                        {result}
-                        {l.status === "finished" && l.finishReason && result !== "Draw" && (
-                          <span className="lobby-card-reason"> · {l.finishReason}</span>
-                        )}
-                      </span>
-                    </div>
-                    <div className="lobby-card-actions">
-                      {canClaimRefund && (
-                        <button
-                          type="button"
-                          className="btn btn-claim-refund"
-                          onClick={() => claimRefund(l.contractGameId)}
-                          disabled={claimingRefundId === l.contractGameId}
-                          title="Get your bet back from the escrow contract"
-                        >
-                          {claimingRefundId === l.contractGameId ? "Claiming…" : "Claim refund"}
-                        </button>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
           )}
         </div>
       )}
