@@ -146,6 +146,7 @@ export default function App() {
 
   const handleLobbyTabChange = (tab) => {
     if (tab === "live") navigate("/livegames");
+    else if (tab === "history") navigate("/history");
     else if (tab === "leaderboard") navigate("/leaderboard");
     else navigate("/lobbies");
   };
@@ -255,6 +256,27 @@ export default function App() {
                   }}
                   onSpectate={openSpectate}
                   activeTab="live"
+                  onTabChange={handleLobbyTabChange}
+                />
+              }
+            />
+            <Route
+              path="/history"
+              element={
+                <LobbyList
+                  wallet={wallet}
+                  rulesAccepted={rulesAccepted}
+                  onShowRules={() => setShowRulesModal(true)}
+                  onJoinLobby={openGame}
+                  onCreateClick={() => {
+                    if (!rulesAccepted) {
+                      setShowRulesModal(true);
+                      return;
+                    }
+                    navigate("/create");
+                  }}
+                  onSpectate={openSpectate}
+                  activeTab="history"
                   onTabChange={handleLobbyTabChange}
                 />
               }
