@@ -47,6 +47,10 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
   const [cancelError, setCancelError] = useState(null);
   const [failedCancelLobby, setFailedCancelLobby] = useState(null); // lobby that failed on-chain cancel, so we can offer "Remove from list anyway"
   const [contractCancelReason, setContractCancelReason] = useState(null); // reason from reading contract state after cancel failed
+  const [claimingRefund, setClaimingRefund] = useState(false);
+  const [refundGameId, setRefundGameId] = useState("");
+  const [refundError, setRefundError] = useState(null);
+  const [refundSuccess, setRefundSuccess] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -245,6 +249,32 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
     }
   };
 
+  const claimRefund = async () => {
+    if (!refundGameId || !wallet || !hasEscrow()) return;
+    const gameId = parseInt(refundGameId.trim(), 10);
+    if (Number.isNaN(gameId) || gameId < 1) {
+      setRefundError("Invalid game ID. Enter a number (e.g. 58)");
+      return;
+    }
+    setClaimingRefund(true);
+    setRefundError(null);
+    setRefundSuccess(false);
+    try {
+      const ok = await cancelLobbyOnChain(gameId);
+      if (ok) {
+        setRefundSuccess(true);
+        setRefundGameId("");
+        setTimeout(() => setRefundSuccess(false), 5000);
+      } else {
+        setRefundError("Transaction failed or was rejected");
+      }
+    } catch (e) {
+      setRefundError(e?.message || e?.reason || "Failed to claim refund");
+    } finally {
+      setClaimingRefund(false);
+    }
+  };
+
   return (
     <section className="lobby-list lobby-page">
       <div className="lobby-tabs" role="tablist">
@@ -300,6 +330,44 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
               </button>
             </div>
           </div>
+
+          {hasEscrow() && wallet && (
+            <div className="lobby-refund-card">
+              <h3 className="lobby-refund-title">Claim refund for cancelled lobby</h3>
+              <p className="lobby-refund-hint">
+                If your lobby was auto-cancelled (no opponent joined within 30 minutes), your bet is still in the escrow contract. Enter your game ID to claim your refund.
+              </p>
+              <div className="lobby-refund-form">
+                <input
+                  type="number"
+                  className="lobby-refund-input"
+                  placeholder="Game ID (e.g. 58)"
+                  value={refundGameId}
+                  onChange={(e) => {
+                    setRefundGameId(e.target.value);
+                    setRefundError(null);
+                    setRefundSuccess(false);
+                  }}
+                  disabled={claimingRefund}
+                  min="1"
+                />
+                <button
+                  type="button"
+                  className="btn btn-claim-refund"
+                  onClick={claimRefund}
+                  disabled={claimingRefund || !refundGameId.trim()}
+                >
+                  {claimingRefund ? "Claiming…" : "Claim refund"}
+                </button>
+              </div>
+              {refundError && (
+                <p className="lobby-refund-error" role="alert">{refundError}</p>
+              )}
+              {refundSuccess && (
+                <p className="lobby-refund-success" role="alert">✓ Refund claimed successfully! Check your wallet.</p>
+              )}
+            </div>
+          )}
 
           {(joinError || cancelError) && (
             <div className="lobby-error" role="alert">

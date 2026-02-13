@@ -849,6 +849,90 @@ a.btn {
   justify-content: center;
 }
 
+.lobby-refund-card {
+  padding: 20px 24px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 20, 160, 0.3);
+  background: rgba(255, 20, 160, 0.05);
+  margin-bottom: 32px;
+}
+
+.lobby-refund-title {
+  margin: 0 0 8px 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: rgba(255, 20, 160, 0.9);
+}
+
+.lobby-refund-hint {
+  margin: 0 0 16px 0;
+  font-size: 0.85rem;
+  color: rgba(200, 220, 255, 0.6);
+  line-height: 1.5;
+}
+
+.lobby-refund-form {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.lobby-refund-input {
+  flex: 1;
+  max-width: 200px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 20, 160, 0.4);
+  background: rgba(10, 10, 40, 0.6);
+  color: rgba(200, 220, 255, 0.9);
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.lobby-refund-input:focus {
+  outline: none;
+  border-color: rgba(255, 20, 160, 0.7);
+  box-shadow: 0 0 10px rgba(255, 20, 160, 0.2);
+}
+
+.lobby-refund-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-claim-refund {
+  padding: 10px 20px;
+  font-size: 0.9rem;
+  background: rgba(255, 20, 160, 0.2);
+  border: 1px solid rgba(255, 20, 160, 0.6);
+  color: #ff66c4;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-claim-refund:hover:not(:disabled) {
+  background: rgba(255, 20, 160, 0.3);
+  box-shadow: 0 0 15px rgba(255, 20, 160, 0.3);
+}
+
+.btn-claim-refund:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lobby-refund-error {
+  margin: 12px 0 0 0;
+  font-size: 0.85rem;
+  color: #ff8080;
+}
+
+.lobby-refund-success {
+  margin: 12px 0 0 0;
+  font-size: 0.85rem;
+  color: #66ff66;
+}
+
 .lobby-btn-icon {
   margin-right: 8px;
   opacity: 0.9;
