@@ -369,6 +369,64 @@ app.get("/api/lobbies", async (req, res) => {
   res.json({ lobbies: list });
 });
 
+// History: finished + cancelled lobbies for a given wallet. Must be defined BEFORE /:lobbyId so "history" is not treated as lobbyId.
+app.get("/api/lobbies/history", async (req, res) => {
+  const wallet = (req.query.wallet || "").trim();
+  if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
+    return res.status(400).json({ error: "Valid wallet query required" });
+  }
+  const w = wallet.toLowerCase();
+
+  // Combine in-memory + store results, deduplicate by lobbyId
+  const seen = new Set();
+  const results = [];
+
+  // In-memory lobbies
+  for (const lobby of lobbies.values()) {
+    if (lobby.status !== "finished" && lobby.status !== "cancelled") continue;
+    if (lobby.player1Wallet?.toLowerCase() !== w && lobby.player2Wallet?.toLowerCase() !== w) continue;
+    seen.add(lobby.lobbyId);
+    results.push({
+      lobbyId: lobby.lobbyId,
+      contractGameId: lobby.contractGameId,
+      betAmount: lobby.betAmount,
+      player1Wallet: lobby.player1Wallet,
+      player2Wallet: lobby.player2Wallet,
+      fen: lobby.fen,
+      status: lobby.status,
+      winner: lobby.winner,
+      finishReason: lobby.finishReason ?? null,
+      drawReason: lobby.drawReason ?? null,
+      createdAt: lobby.createdAt ?? null,
+    });
+  }
+
+  // Store lobbies (may include ones not in memory)
+  const fromStore = await getLobbiesByWallet(w);
+  for (const data of fromStore) {
+    if (seen.has(data.lobbyId)) continue;
+    results.push({
+      lobbyId: data.lobbyId,
+      contractGameId: data.contractGameId ?? null,
+      betAmount: data.betAmount ?? "0",
+      player1Wallet: data.player1Wallet ?? null,
+      player2Wallet: data.player2Wallet ?? null,
+      fen: data.fen ?? null,
+      status: data.status,
+      winner: data.winner ?? null,
+      finishReason: data.finishReason ?? null,
+      drawReason: data.drawReason ?? null,
+      createdAt: data.createdAt ?? null,
+    });
+  }
+
+  // Sort by createdAt desc (most recent first)
+  results.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+
+  log("GET /api/lobbies/history", { wallet: w.slice(0, 10) + "…", count: results.length });
+  res.json({ lobbies: results });
+});
+
 app.get("/api/lobbies/:lobbyId", async (req, res) => {
   const { lobbyId } = req.params;
   if (!isValidLobbyId(lobbyId)) {
@@ -714,64 +772,6 @@ app.get("/api/leaderboard", (req, res) => {
     });
   log("GET /api/leaderboard", { count: leaderboard.length });
   res.json({ leaderboard });
-});
-
-// History: finished + cancelled lobbies for a given wallet. Returns up to 100 most recent.
-app.get("/api/lobbies/history", async (req, res) => {
-  const wallet = (req.query.wallet || "").trim();
-  if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
-    return res.status(400).json({ error: "Valid wallet query required" });
-  }
-  const w = wallet.toLowerCase();
-
-  // Combine in-memory + store results, deduplicate by lobbyId
-  const seen = new Set();
-  const results = [];
-
-  // In-memory lobbies
-  for (const lobby of lobbies.values()) {
-    if (lobby.status !== "finished" && lobby.status !== "cancelled") continue;
-    if (lobby.player1Wallet?.toLowerCase() !== w && lobby.player2Wallet?.toLowerCase() !== w) continue;
-    seen.add(lobby.lobbyId);
-    results.push({
-      lobbyId: lobby.lobbyId,
-      contractGameId: lobby.contractGameId,
-      betAmount: lobby.betAmount,
-      player1Wallet: lobby.player1Wallet,
-      player2Wallet: lobby.player2Wallet,
-      fen: lobby.fen,
-      status: lobby.status,
-      winner: lobby.winner,
-      finishReason: lobby.finishReason ?? null,
-      drawReason: lobby.drawReason ?? null,
-      createdAt: lobby.createdAt ?? null,
-    });
-  }
-
-  // Store lobbies (may include ones not in memory)
-  const fromStore = await getLobbiesByWallet(w);
-  for (const data of fromStore) {
-    if (seen.has(data.lobbyId)) continue;
-    results.push({
-      lobbyId: data.lobbyId,
-      contractGameId: data.contractGameId ?? null,
-      betAmount: data.betAmount ?? "0",
-      player1Wallet: data.player1Wallet ?? null,
-      player2Wallet: data.player2Wallet ?? null,
-      fen: data.fen ?? null,
-      status: data.status,
-      winner: data.winner ?? null,
-      finishReason: data.finishReason ?? null,
-      drawReason: data.drawReason ?? null,
-      createdAt: data.createdAt ?? null,
-    });
-  }
-
-  // Sort by createdAt desc (most recent first)
-  results.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
-
-  log("GET /api/lobbies/history", { wallet: w.slice(0, 10) + "…", count: results.length });
-  res.json({ lobbies: results });
 });
 
 // Timeout: only the player who ran out of time can trigger (they sign; server sets winner to the other).

@@ -257,12 +257,14 @@ export async function getLobbiesByWallet(wallet) {
   const w = wallet.toLowerCase();
   if (storeMode === "mongo" && mongoCollection) {
     try {
-      const escaped = w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const regex = new RegExp(`^${escaped}$`, "i");
+      // Case-insensitive match: compare lowercased fields to lowercased wallet (works regardless of stored casing)
       const docs = await mongoCollection
         .find({
           status: { $in: ["finished", "cancelled"] },
-          $or: [{ player1Wallet: regex }, { player2Wallet: regex }],
+          $or: [
+            { $expr: { $eq: [{ $toLower: { $ifNull: ["$player1Wallet", ""] } }, w] } },
+            { $expr: { $eq: [{ $toLower: { $ifNull: ["$player2Wallet", ""] } }, w] } },
+          ],
         })
         .sort({ createdAt: -1 })
         .limit(100)
