@@ -53,6 +53,7 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
   const [claimingRefundId, setClaimingRefundId] = useState(null);
   const [refundError, setRefundError] = useState(null);
   const [refundSuccessId, setRefundSuccessId] = useState(null);
+  const [refundClaimedLobbyIds, setRefundClaimedLobbyIds] = useState(() => new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -280,6 +281,7 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
     try {
       const ok = await cancelLobbyOnChain(gameId);
       if (ok) {
+        setRefundClaimedLobbyIds((prev) => new Set(prev).add(lobbyId));
         setRefundSuccessId(lobbyId);
         setTimeout(() => setRefundSuccessId(null), 5000);
       } else {
@@ -612,6 +614,7 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
                   }
 
                   const canRefund = isCancelled && hasEscrow() && l.contractGameId != null;
+                  const refundAlreadyClaimed = refundClaimedLobbyIds.has(l.lobbyId);
 
                   const resultIcon =
                     resultClass === "history-won" ? "♔" : resultClass === "history-lost" ? "♟" : resultClass === "history-draw" ? "=" : "⊗";
@@ -636,7 +639,7 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
                         </div>
                       </div>
                       <div className="lobby-card-actions history-card-actions">
-                        {canRefund && refundSuccessId !== l.lobbyId && (
+                        {canRefund && !refundAlreadyClaimed && (
                           <button
                             type="button"
                             className="btn btn-claim-refund"
@@ -647,8 +650,8 @@ export default function LobbyList({ wallet, rulesAccepted, onShowRules, onJoinLo
                             {claimingRefundId === l.lobbyId ? "Claiming…" : "Claim refund"}
                           </button>
                         )}
-                        {refundSuccessId === l.lobbyId && (
-                          <span className="history-refund-ok">Refunded</span>
+                        {(refundAlreadyClaimed || refundSuccessId === l.lobbyId) && (
+                          <span className="history-refund-ok">Refund claimed</span>
                         )}
                       </div>
                     </li>
