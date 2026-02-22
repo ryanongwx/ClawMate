@@ -66,10 +66,11 @@ function isValidLobbyId(id) {
 const INITIAL_TIME_SEC = 10 * 60;
 
 
-// CORS: allow one or more frontend origins (comma-separated env list)
+// CORS: allow one or more frontend origins (comma-separated env list).
+// Normalize each origin (strip all whitespace, trim) so env newlines/spaces don't break matching.
 const ALLOWED_ORIGINS = (process.env.FRONTEND_URL || "http://localhost:5173")
   .split(",")
-  .map((s) => s.trim())
+  .map((s) => s.replace(/\s/g, "").trim())
   .filter(Boolean);
 
 const app = express();
@@ -1231,6 +1232,7 @@ async function start() {
   cleanupStaleLobbies(); // run once on startup
   http.listen(PORT, "0.0.0.0", () => {
     log(`Server listening on 0.0.0.0:${PORT}`);
+    log("CORS", { allowedOriginCount: ALLOWED_ORIGINS.length, origins: ALLOWED_ORIGINS });
     log("Escrow resolver", { enabled: !!escrowContract });
     log("Persistence", { mongo: !!process.env.MONGODB_URI, redis: !!process.env.REDIS_URL });
   });
