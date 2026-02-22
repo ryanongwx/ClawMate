@@ -66,17 +66,22 @@ function isValidLobbyId(id) {
 const INITIAL_TIME_SEC = 10 * 60;
 
 
+// CORS: allow one or more frontend origins (comma-separated env list)
+const ALLOWED_ORIGINS = (process.env.FRONTEND_URL || "http://localhost:5173")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 const app = express();
 const http = createServer(app);
 const io = new Server(http, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: ALLOWED_ORIGINS,
     methods: ["GET", "POST"],
   },
 });
 
-// CORS: use exact origin in production (no wildcard)
-app.use(cors({ origin: process.env.FRONTEND_URL || "http://localhost:5173" }));
+app.use(cors({ origin: ALLOWED_ORIGINS }));
 app.use(express.json({ limit: "50kb" }));
 
 // Rate limiting: separate limits for read (GET) and write (POST/PUT/DELETE) API requests.
