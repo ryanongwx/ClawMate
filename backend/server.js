@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from "uuid";
 import { Chess } from "chess.js";
 import { initStore, loadLobbies, saveLobby, getLobbyFromStore, hydrateLobby, findWaitingLobbyByCreator, getLobbiesByWallet, loadProfiles, getProfile, setProfile } from "./store.js";
 import { isProfane } from "./profanity.js";
+import { resolveSolanaEscrowIfNeeded } from "./solanaEscrow.js";
 
 const ts = () => new Date().toISOString();
 const log = (msg, data = null) => {
@@ -171,6 +172,13 @@ async function resolveEscrowIfNeeded(lobby) {
     logErr("Escrow resolveGame failed", e);
     // Common cause: "Not owner or resolver" — set RESOLVER_PRIVATE_KEY to the resolver wallet and call setResolver(resolverAddress) on the contract (owner only), or use deployer key as RESOLVER_PRIVATE_KEY.
   }
+}
+
+async function resolveAllEscrowsIfNeeded(lobby) {
+  // Monad / EVM escrow (no-op if not configured)
+  await resolveEscrowIfNeeded(lobby);
+  // Solana escrow (no-op if SOLANA_* env vars or IDL are not set)
+  await resolveSolanaEscrowIfNeeded(lobby, log, logErr);
 }
 
 function createLobby(player1Wallet, betAmount, contractGameId) {
@@ -658,7 +666,7 @@ app.post("/api/lobbies/:lobbyId/concede", async (req, res) => {
   const cp2 = lobby.player2Wallet?.toLowerCase();
   if (cp1) io.to(`wallet:${cp1}`).emit("move", concedePayload);
   if (cp2) io.to(`wallet:${cp2}`).emit("move", concedePayload);
-  resolveEscrowIfNeeded(lobby).catch(() => {});
+  resolveAllEscrowsIfNeeded(lobby).catch(() => {});
   res.json({ ok: true, status: "finished", winner: lobby.winner });
 });
 
@@ -818,7 +826,7 @@ app.post("/api/lobbies/:lobbyId/timeout", (req, res) => {
   const tp2 = lobby.player2Wallet?.toLowerCase();
   if (tp1) io.to(`wallet:${tp1}`).emit("move", timeoutPayload);
   if (tp2) io.to(`wallet:${tp2}`).emit("move", timeoutPayload);
-  resolveEscrowIfNeeded(lobby).catch(() => {});
+  resolveAllEscrowsIfNeeded(lobby).catch(() => {});
   res.json({ ok: true, status: "finished", winner: lobby.winner });
 });
 
@@ -893,7 +901,7 @@ app.post("/api/lobbies/:lobbyId/move", async (req, res) => {
   if (p2w) io.to(`wallet:${p2w}`).emit("move", movePayload);
 
   if (result.status === "finished") {
-    resolveEscrowIfNeeded(lobby).catch(() => {});
+    resolveAllEscrowsIfNeeded(lobby).catch(() => {});
   }
 
   res.json({
@@ -1016,7 +1024,7 @@ io.on("connection", (socket) => {
     const result = applyMove(lobbyId, from, to, promotion || "q");
     if (result.ok) {
       saveLobby(lobby).catch(() => {});
-      if (result.status === "finished" && lobby) resolveEscrowIfNeeded(lobby).catch(() => {});
+      if (result.status === "finished" && lobby) resolveAllEscrowsIfNeeded(lobby).catch(() => {});
       log("Socket move", { lobbyId, from, to: to || promotion, status: result.status, winner: result.winner ?? null });
       const movePayload = {
         lobbyId,
@@ -1100,7 +1108,7 @@ io.on("connection", (socket) => {
     lobby.finishReason = "agreement";
     lobby.drawOfferBy = null;
     saveLobby(lobby).catch(() => {});
-    resolveEscrowIfNeeded(lobby).catch(() => {});
+    resolveAllEscrowsIfNeeded(lobby).catch(() => {});
     log("Draw accepted (agreement)", { lobbyId });
     const drawPayload = { lobbyId, fen: lobby.fen, winner: "draw", status: "finished", reason: "agreement" };
     io.to(lobbyId).emit("move", drawPayload);
@@ -1185,7 +1193,7 @@ function tickClocks() {
         const p2w = lobby.player2Wallet?.toLowerCase();
         if (p1w) io.to(`wallet:${p1w}`).emit("move", payload);
         if (p2w) io.to(`wallet:${p2w}`).emit("move", payload);
-        resolveEscrowIfNeeded(lobby).catch(() => {});
+        resolveAllEscrowsIfNeeded(lobby).catch(() => {});
       }
     } else {
       lobby.blackTimeSec = Math.max(0, blackSec - 1);
@@ -1202,7 +1210,7 @@ function tickClocks() {
         const p2w = lobby.player2Wallet?.toLowerCase();
         if (p1w) io.to(`wallet:${p1w}`).emit("move", payload);
         if (p2w) io.to(`wallet:${p2w}`).emit("move", payload);
-        resolveEscrowIfNeeded(lobby).catch(() => {});
+        resolveAllEscrowsIfNeeded(lobby).catch(() => {});
       }
     }
   }

@@ -1,0 +1,13 @@
+[workspace]
+members = [
+  "programs/chess_bet_escrow",
+]
+resolver = "2"
+
+[profile.release]
+overflow-checks = true
+
+# Pin deps for Solana toolchain (Cargo 1.79 / rustc 1.79)
+# blake3 1.8+ pulls constant_time_eq 0.4.x (needs edition2024); use blake3 1.7.0
+[patch.crates-io]
+blake3 = { git = "https://github.com/BLAKE3-team/BLAKE3", tag = "1.7.0" }

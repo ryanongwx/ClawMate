@@ -1,0 +1,14 @@
+/Users/ryanongwx/Desktop/clawmate/solana/target/release/deps/libserde-bab526f093bdaf74.rmeta: /Users/ryanongwx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/serde-1.0.228/src/lib.rs /Users/ryanongwx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/serde-1.0.228/src/integer128.rs /Users/ryanongwx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/serde-1.0.228/src/private/mod.rs /Users/ryanongwx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/serde-1.0.228/src/private/de.rs /Users/ryanongwx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/serde-1.0.228/src/private/ser.rs /Users/ryanongwx/Desktop/clawmate/solana/target/release/build/serde-f3f4b454556fa5e4/out/private.rs
+
+/Users/ryanongwx/Desktop/clawmate/solana/target/release/deps/libserde-bab526f093bdaf74.rlib: /Users/ryanongwx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/serde-1.0.228/src/lib.rs /Users/ryanongwx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/serde-1.0.228/src/integer128.rs /Users/ryanongwx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/serde-1.0.228/src/private/mod.rs /Users/ryanongwx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/serde-1.0.228/src/private/de.rs /Users/ryanongwx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/serde-1.0.228/src/private/ser.rs /Users/ryanongwx/Desktop/clawmate/solana/target/release/build/serde-f3f4b454556fa5e4/out/private.rs
+
+/Users/ryanongwx/Desktop/clawmate/solana/target/release/deps/serde-bab526f093bdaf74.d: /Users/ryanongwx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/serde-1.0.228/src/lib.rs /Users/ryanongwx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/serde-1.0.228/src/integer128.rs /Users/ryanongwx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/serde-1.0.228/src/private/mod.rs /Users/ryanongwx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/serde-1.0.228/src/private/de.rs /Users/ryanongwx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/serde-1.0.228/src/private/ser.rs /Users/ryanongwx/Desktop/clawmate/solana/target/release/build/serde-f3f4b454556fa5e4/out/private.rs
+
+/Users/ryanongwx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/serde-1.0.228/src/lib.rs:
+/Users/ryanongwx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/serde-1.0.228/src/integer128.rs:
+/Users/ryanongwx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/serde-1.0.228/src/private/mod.rs:
+/Users/ryanongwx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/serde-1.0.228/src/private/de.rs:
+/Users/ryanongwx/.cargo/registry/src/index.crates.io-6f17d22bba15001f/serde-1.0.228/src/private/ser.rs:
+/Users/ryanongwx/Desktop/clawmate/solana/target/release/build/serde-f3f4b454556fa5e4/out/private.rs:
+
+# env-dep:OUT_DIR=/Users/ryanongwx/Desktop/clawmate/solana/target/release/build/serde-f3f4b454556fa5e4/out

@@ -1,0 +1,12 @@
+[package]
+name = "chess_bet_escrow"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "chess_bet_escrow"
+crate-type = ["cdylib", "lib"]
+
+[dependencies]
+anchor-lang = "0.30.0"
+

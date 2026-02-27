@@ -1,0 +1,25 @@
+[workspace]
+members = [
+  "programs/chess_bet_escrow",
+]
+
+[toolchain]
+anchor_version = "0.30.0"
+
+[provider]
+cluster = "devnet"
+wallet = "~/.config/solana/monopoly.json"
+
+[programs.localnet]
+chess_bet_escrow = "11111111111111111111111111111111"
+
+[programs.devnet]
+chess_bet_escrow = "11111111111111111111111111111111"
+
+[programs.mainnet]
+chess_bet_escrow = "11111111111111111111111111111111"
+
+[scripts]
+# Use --no-idl to avoid proc_macro2::Span::source_file() error with Solana toolchain
+deploy = "anchor build --no-idl && anchor deploy"
+
