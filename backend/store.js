@@ -119,14 +119,14 @@ export async function getLobbyFromStore(lobbyId) {
  */
 export async function findWaitingLobbyByCreator(wallet) {
   if (!wallet || typeof wallet !== "string") return null;
-  const w = wallet.toLowerCase();
+  const isEvm = wallet.startsWith("0x");
+  const w = isEvm ? wallet.toLowerCase() : wallet;
   if (storeMode === "mongo" && mongoCollection) {
     try {
-      const escaped = wallet.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const doc = await mongoCollection.findOne(
-        { status: "waiting", player1Wallet: new RegExp(`^${escaped}$`, "i") },
-        { projection: { lobbyId: 1 } }
-      );
+      const query = isEvm
+        ? { status: "waiting", $expr: { $eq: [{ $toLower: { $ifNull: ["$player1Wallet", ""] } }, w] } }
+        : { status: "waiting", player1Wallet: wallet };
+      const doc = await mongoCollection.findOne(query, { projection: { lobbyId: 1 } });
       return doc?.lobbyId ?? null;
     } catch (e) {
       console.warn("[store] findWaitingLobbyByCreator (MongoDB) failed", e.message);
@@ -141,7 +141,9 @@ export async function findWaitingLobbyByCreator(wallet) {
         if (!raw) continue;
         try {
           const data = JSON.parse(raw);
-          if (data.status === "waiting" && (data.player1Wallet || "").toLowerCase() === w) return id;
+          const p1 = data.player1Wallet || "";
+          const match = isEvm ? p1.toLowerCase() === w : p1 === wallet;
+          if (data.status === "waiting" && match) return id;
         } catch (_) {}
       }
       return null;
@@ -254,18 +256,24 @@ export async function saveLobby(lobby) {
  */
 export async function getLobbiesByWallet(wallet) {
   if (!wallet || typeof wallet !== "string") return [];
-  const w = wallet.toLowerCase();
+  const isEvm = wallet.startsWith("0x");
+  const w = isEvm ? wallet.toLowerCase() : wallet;
   if (storeMode === "mongo" && mongoCollection) {
     try {
-      // Case-insensitive match: compare lowercased fields to lowercased wallet (works regardless of stored casing)
+      const query = isEvm
+        ? {
+            status: { $in: ["finished", "cancelled"] },
+            $or: [
+              { $expr: { $eq: [{ $toLower: { $ifNull: ["$player1Wallet", ""] } }, w] } },
+              { $expr: { $eq: [{ $toLower: { $ifNull: ["$player2Wallet", ""] } }, w] } },
+            ],
+          }
+        : {
+            status: { $in: ["finished", "cancelled"] },
+            $or: [{ player1Wallet: wallet }, { player2Wallet: wallet }],
+          };
       const docs = await mongoCollection
-        .find({
-          status: { $in: ["finished", "cancelled"] },
-          $or: [
-            { $expr: { $eq: [{ $toLower: { $ifNull: ["$player1Wallet", ""] } }, w] } },
-            { $expr: { $eq: [{ $toLower: { $ifNull: ["$player2Wallet", ""] } }, w] } },
-          ],
-        })
+        .find(query)
         .sort({ createdAt: -1 })
         .limit(100)
         .toArray();
@@ -293,7 +301,7 @@ export async function loadLobbiesFromRedis(lobbies, Chess) {
  */
 export async function getProfile(wallet) {
   if (!wallet || typeof wallet !== "string") return null;
-  const w = wallet.toLowerCase();
+  const w = wallet.startsWith("0x") ? wallet.toLowerCase() : wallet;
   if (storeMode === "mongo" && mongoProfilesCollection) {
     try {
       const doc = await mongoProfilesCollection.findOne({ wallet: w }, { projection: { username: 1 } });
@@ -322,7 +330,7 @@ export async function getProfile(wallet) {
  */
 export async function setProfile(wallet, username) {
   if (!wallet || typeof wallet !== "string" || typeof username !== "string") return;
-  const w = wallet.toLowerCase();
+  const w = wallet.startsWith("0x") ? wallet.toLowerCase() : wallet;
   const trimmed = username.trim();
   if (storeMode === "mongo" && mongoProfilesCollection) {
     try {

@@ -7,6 +7,9 @@ edition = "2021"
 name = "chess_bet_escrow"
 crate-type = ["cdylib", "lib"]
 
+[features]
+idl-build = ["anchor-lang/idl-build"]
+
 [dependencies]
 anchor-lang = "0.30.0"
 

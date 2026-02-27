@@ -5,6 +5,8 @@ import { Server } from "socket.io";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { verifyMessage } from "ethers";
+import nacl from "tweetnacl";
+import bs58 from "bs58";
 import { v4 as uuidv4 } from "uuid";
 import { Chess } from "chess.js";
 import { initStore, loadLobbies, saveLobby, getLobbyFromStore, hydrateLobby, findWaitingLobbyByCreator, getLobbiesByWallet, loadProfiles, getProfile, setProfile } from "./store.js";
@@ -21,7 +23,7 @@ const logErr = (msg, err) => console.error(`[${ts()}] [clawmate] ERROR ${msg}`, 
 // Signature replay window (ms)
 const SIGNATURE_TTL_MS = 120 * 1000;
 
-/** Recover address from signed message. Returns lowercase address or null. */
+/** Recover address from signed message (EVM). Returns lowercase address or null. */
 function recoverAddress(message, signature) {
   if (!message || typeof message !== "string" || !signature || typeof signature !== "string") return null;
   try {
@@ -30,6 +32,38 @@ function recoverAddress(message, signature) {
   } catch {
     return null;
   }
+}
+
+/** Verify Solana signature. Returns wallet (base58 pubkey) or null. */
+function verifySolanaSignature(message, signature, wallet) {
+  if (!message || !signature || !wallet || typeof wallet !== "string") return null;
+  try {
+    const msgBytes = new TextEncoder().encode(message);
+    const sigBytes = bs58.decode(signature);
+    const pubkeyBytes = bs58.decode(wallet);
+    if (sigBytes.length !== 64 || pubkeyBytes.length !== 32) return null;
+    return nacl.sign.detached.verify(msgBytes, sigBytes, pubkeyBytes) ? wallet : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Auth helper: returns wallet string (EVM lowercase or Solana base58) or null. */
+function authWallet(body) {
+  const { message, signature, chain, wallet } = body || {};
+  if (!message || !signature) return null;
+  if (chain === "solana" && wallet) {
+    if (!isSignatureFresh(message)) return null;
+    return verifySolanaSignature(message, signature, wallet);
+  }
+  return recoverAddress(message, signature);
+}
+
+/** Compare wallets (EVM: case-insensitive; Solana: exact). */
+function walletMatches(a, b) {
+  if (!a || !b) return false;
+  if (a.startsWith("0x") && b.startsWith("0x")) return a.toLowerCase() === b.toLowerCase();
+  return a === b;
 }
 
 /** Extract timestamp from message line "Timestamp: 1234567890". Returns number or null. */
@@ -292,10 +326,7 @@ app.post("/api/lobbies", async (req, res) => {
   if (!message || !signature) {
     return res.status(400).json({ error: "message and signature required" });
   }
-  if (!isSignatureFresh(message)) {
-    return res.status(400).json({ error: "Signature expired or invalid timestamp" });
-  }
-  const player1Wallet = recoverAddress(message, signature);
+  const player1Wallet = authWallet(req.body);
   if (!player1Wallet) {
     return res.status(400).json({ error: "Invalid signature" });
   }
@@ -317,7 +348,7 @@ app.post("/api/lobbies", async (req, res) => {
     return res.status(400).json({ error: "You are already in an active game. Finish or concede it first.", activeLobbyId: activeGame.lobbyId });
   }
 
-  const existingInMemory = Array.from(lobbies.values()).find((l) => l.status === "waiting" && l.player1Wallet?.toLowerCase() === player1Wallet);
+  const existingInMemory = Array.from(lobbies.values()).find((l) => l.status === "waiting" && walletMatches(l.player1Wallet, player1Wallet));
   if (existingInMemory) {
     log("POST /api/lobbies 400 already have lobby", { existingLobbyId: existingInMemory.lobbyId });
     return res.status(400).json({ error: "You already have an open lobby. Cancel it or wait for someone to join.", existingLobbyId: existingInMemory.lobbyId });
@@ -386,10 +417,12 @@ app.get("/api/lobbies", async (req, res) => {
 // History: finished + cancelled lobbies for a given wallet. Must be defined BEFORE /:lobbyId so "history" is not treated as lobbyId.
 app.get("/api/lobbies/history", async (req, res) => {
   const wallet = (req.query.wallet || "").trim();
-  if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
-    return res.status(400).json({ error: "Valid wallet query required" });
+  const isEvm = /^0x[a-fA-F0-9]{40}$/.test(wallet);
+  const isSolana = wallet.length >= 32 && wallet.length <= 44 && !wallet.startsWith("0x");
+  if (!wallet || (!isEvm && !isSolana)) {
+    return res.status(400).json({ error: "Valid wallet query required (EVM 0x... or Solana base58)" });
   }
-  const w = wallet.toLowerCase();
+  const w = isEvm ? wallet.toLowerCase() : wallet;
 
   // Combine in-memory + store results, deduplicate by lobbyId
   const seen = new Set();
@@ -398,7 +431,7 @@ app.get("/api/lobbies/history", async (req, res) => {
   // In-memory lobbies
   for (const lobby of lobbies.values()) {
     if (lobby.status !== "finished" && lobby.status !== "cancelled") continue;
-    if (lobby.player1Wallet?.toLowerCase() !== w && lobby.player2Wallet?.toLowerCase() !== w) continue;
+    if (!walletMatches(lobby.player1Wallet, w) && !walletMatches(lobby.player2Wallet, w)) continue;
     seen.add(lobby.lobbyId);
     results.push({
       lobbyId: lobby.lobbyId,
@@ -481,14 +514,7 @@ app.post("/api/lobbies/:lobbyId/join", async (req, res) => {
   if (!isValidLobbyId(lobbyId)) {
     return res.status(400).json({ error: "Invalid lobby id" });
   }
-  const { message, signature } = req.body || {};
-  if (!message || !signature) {
-    return res.status(400).json({ error: "message and signature required" });
-  }
-  if (!isSignatureFresh(message)) {
-    return res.status(400).json({ error: "Signature expired or invalid timestamp" });
-  }
-  const player2Wallet = recoverAddress(message, signature);
+  const player2Wallet = authWallet(req.body);
   if (!player2Wallet) {
     return res.status(400).json({ error: "Invalid signature" });
   }
@@ -496,7 +522,7 @@ app.post("/api/lobbies/:lobbyId/join", async (req, res) => {
 
   // Prevent joining if already in a playing game
   const activeGame = Array.from(lobbies.values()).find(
-    (l) => l.status === "playing" && (l.player1Wallet?.toLowerCase() === player2Wallet || l.player2Wallet?.toLowerCase() === player2Wallet)
+    (l) => l.status === "playing" && (walletMatches(l.player1Wallet, player2Wallet) || walletMatches(l.player2Wallet, player2Wallet))
   );
   if (activeGame) {
     log("Join 400 already in active game", { activeLobbyId: activeGame.lobbyId });
@@ -526,7 +552,7 @@ app.post("/api/lobbies/:lobbyId/join", async (req, res) => {
     log("Join 400 lobby already has player", { lobbyId });
     return res.status(400).json({ error: "Lobby already has a player" });
   }
-  if (lobby.player1Wallet?.toLowerCase() === player2Wallet) {
+  if (walletMatches(lobby.player1Wallet, player2Wallet)) {
     log("Join 400 cannot join own lobby", { lobbyId });
     return res.status(400).json({ error: "You cannot join your own lobby" });
   }
@@ -546,7 +572,8 @@ app.post("/api/lobbies/:lobbyId/join", async (req, res) => {
   };
   io.to(lobbyId).emit("lobby_joined", startPayload);
   // Creator (White) may not be in room yet; send full game-start payload to wallet room so they can act immediately
-  io.to(`wallet:${lobby.player1Wallet.toLowerCase()}`).emit("lobby_joined_yours", {
+  const p1Key = lobby.player1Wallet?.startsWith("0x") ? lobby.player1Wallet.toLowerCase() : lobby.player1Wallet;
+  if (p1Key) io.to(`wallet:${p1Key}`).emit("lobby_joined_yours", {
     lobbyId,
     player2Wallet,
     betAmount: lobby.betAmount,
@@ -564,14 +591,7 @@ app.post("/api/lobbies/:lobbyId/cancel", async (req, res) => {
     return res.status(400).json({ error: "Invalid lobby id" });
   }
   let lobby = lobbies.get(lobbyId);
-  const { message, signature } = req.body || {};
-  if (!message || !signature) {
-    return res.status(400).json({ error: "message and signature required" });
-  }
-  if (!isSignatureFresh(message)) {
-    return res.status(400).json({ error: "Signature expired or invalid timestamp" });
-  }
-  const playerWallet = recoverAddress(message, signature);
+  const playerWallet = authWallet(req.body);
   if (!playerWallet) {
     return res.status(400).json({ error: "Invalid signature" });
   }
@@ -580,7 +600,7 @@ app.post("/api/lobbies/:lobbyId/cancel", async (req, res) => {
   // If not in memory (e.g. different instance or restart), try loading from store so we can persist "cancelled"
   if (!lobby) {
     const data = await getLobbyFromStore(lobbyId);
-    if (data && data.status === "waiting" && (data.player1Wallet || "").toLowerCase() === playerWallet) {
+    if (data && data.status === "waiting" && walletMatches(data.player1Wallet, playerWallet)) {
       await saveLobby({ ...data, status: "cancelled" });
       log("Lobby cancelled (from store)", { lobbyId });
       return res.json({ ok: true });
@@ -589,7 +609,7 @@ app.post("/api/lobbies/:lobbyId/cancel", async (req, res) => {
       log("Cancel 404", { lobbyId });
       return res.status(404).json({ error: "Lobby not found" });
     }
-    if ((data.player1Wallet || "").toLowerCase() !== playerWallet) {
+    if (!walletMatches(data.player1Wallet, playerWallet)) {
       log("Cancel 403 not creator", { lobbyId });
       return res.status(403).json({ error: "Only the lobby creator can cancel" });
     }
@@ -600,7 +620,7 @@ app.post("/api/lobbies/:lobbyId/cancel", async (req, res) => {
     return res.status(404).json({ error: "Lobby not found" });
   }
 
-  if (lobby.player1Wallet?.toLowerCase() !== playerWallet) {
+  if (!walletMatches(lobby.player1Wallet, playerWallet)) {
     log("Cancel 403 not creator", { lobbyId });
     return res.status(403).json({ error: "Only the lobby creator can cancel" });
   }
@@ -629,14 +649,7 @@ app.post("/api/lobbies/:lobbyId/concede", async (req, res) => {
       log("Concede: loaded lobby from store", { lobbyId });
     }
   }
-  const { message, signature } = req.body || {};
-  if (!message || !signature) {
-    return res.status(400).json({ error: "message and signature required" });
-  }
-  if (!isSignatureFresh(message)) {
-    return res.status(400).json({ error: "Signature expired or invalid timestamp" });
-  }
-  const playerWallet = recoverAddress(message, signature);
+  const playerWallet = authWallet(req.body);
   if (!playerWallet) {
     return res.status(400).json({ error: "Invalid signature" });
   }
@@ -649,8 +662,8 @@ app.post("/api/lobbies/:lobbyId/concede", async (req, res) => {
     log("Concede 400 not playing", { lobbyId, status: lobby.status });
     return res.status(400).json({ error: "Game not in progress" });
   }
-  const isP1 = lobby.player1Wallet?.toLowerCase() === playerWallet;
-  const isP2 = lobby.player2Wallet?.toLowerCase() === playerWallet;
+  const isP1 = walletMatches(lobby.player1Wallet, playerWallet);
+  const isP2 = walletMatches(lobby.player2Wallet, playerWallet);
   if (!isP1 && !isP2) {
     log("Concede 403 not a player", { lobbyId });
     return res.status(403).json({ error: "Not a player in this game" });
@@ -662,8 +675,8 @@ app.post("/api/lobbies/:lobbyId/concede", async (req, res) => {
   log("Game conceded", { lobbyId, winner: lobby.winner });
   const concedePayload = { lobbyId, fen: lobby.fen, winner: lobby.winner, status: "finished", concede: true };
   io.to(lobbyId).emit("move", concedePayload);
-  const cp1 = lobby.player1Wallet?.toLowerCase();
-  const cp2 = lobby.player2Wallet?.toLowerCase();
+  const cp1 = lobby.player1Wallet?.startsWith("0x") ? lobby.player1Wallet?.toLowerCase() : lobby.player1Wallet;
+  const cp2 = lobby.player2Wallet?.startsWith("0x") ? lobby.player2Wallet?.toLowerCase() : lobby.player2Wallet;
   if (cp1) io.to(`wallet:${cp1}`).emit("move", concedePayload);
   if (cp2) io.to(`wallet:${cp2}`).emit("move", concedePayload);
   resolveAllEscrowsIfNeeded(lobby).catch(() => {});
@@ -700,10 +713,12 @@ app.get("/api/lobbies/:lobbyId/result", (req, res) => {
 
 app.get("/api/profile/username", async (req, res) => {
   const wallet = (req.query.wallet || "").trim();
-  if (!wallet || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
-    return res.status(400).json({ error: "Valid wallet query required" });
+  const isEvm = /^0x[a-fA-F0-9]{40}$/.test(wallet);
+  const isSolana = wallet.length >= 32 && wallet.length <= 44 && !wallet.startsWith("0x");
+  if (!wallet || (!isEvm && !isSolana)) {
+    return res.status(400).json({ error: "Valid wallet query required (EVM 0x... or Solana base58)" });
   }
-  const w = wallet.toLowerCase();
+  const w = isEvm ? wallet.toLowerCase() : wallet;
   let username = profiles.get(w) ?? null;
   if (username == null) {
     username = await getProfile(w);
@@ -713,16 +728,10 @@ app.get("/api/profile/username", async (req, res) => {
 });
 
 app.post("/api/profile/username", async (req, res) => {
-  const { message, signature, username: rawUsername } = req.body || {};
-  if (!message || !signature) {
-    return res.status(400).json({ error: "message and signature required" });
-  }
-  const wallet = recoverAddress(message, signature);
+  const { message, username: rawUsername } = req.body || {};
+  const wallet = authWallet(req.body);
   if (!wallet) {
     return res.status(401).json({ error: "Invalid signature" });
-  }
-  if (!isSignatureFresh(message)) {
-    return res.status(401).json({ error: "Signature expired or invalid" });
   }
   const signedUsername = extractUsernameFromMessage(message);
   const username = typeof rawUsername === "string" ? rawUsername.trim() : "";
@@ -746,8 +755,8 @@ app.get("/api/leaderboard", (req, res) => {
   const stats = {}; // wallet -> { wins, losses, draws, pnl }
   for (const lobby of lobbies.values()) {
     if (lobby.status !== "finished") continue;
-    const p1 = lobby.player1Wallet?.toLowerCase();
-    const p2 = lobby.player2Wallet?.toLowerCase();
+    const p1 = lobby.player1Wallet?.startsWith("0x") ? lobby.player1Wallet?.toLowerCase() : lobby.player1Wallet;
+    const p2 = lobby.player2Wallet?.startsWith("0x") ? lobby.player2Wallet?.toLowerCase() : lobby.player2Wallet;
     if (!p1 || !p2) continue;
     const bet = (() => { try { return BigInt(lobby.betAmount || "0"); } catch { return 0n; } })();
     if (!stats[p1]) stats[p1] = { wallet: lobby.player1Wallet, wins: 0, losses: 0, draws: 0, pnl: 0n };
@@ -795,22 +804,15 @@ app.post("/api/lobbies/:lobbyId/timeout", (req, res) => {
     return res.status(400).json({ error: "Invalid lobby id" });
   }
   const lobby = lobbies.get(lobbyId);
-  const { message, signature } = req.body || {};
-  if (!message || !signature) {
-    return res.status(400).json({ error: "message and signature required" });
-  }
-  if (!isSignatureFresh(message)) {
-    return res.status(400).json({ error: "Signature expired or invalid timestamp" });
-  }
-  const playerWhoTimedOut = recoverAddress(message, signature);
+  const playerWhoTimedOut = authWallet(req.body);
   if (!playerWhoTimedOut) {
     return res.status(400).json({ error: "Invalid signature" });
   }
   log("POST /api/lobbies/:id/timeout", { lobbyId, playerWhoTimedOut: playerWhoTimedOut.slice(0, 10) + "…" });
   if (!lobby) return res.status(404).json({ error: "Lobby not found" });
   if (lobby.status !== "playing") return res.status(400).json({ error: "Game not in progress" });
-  const isP1 = lobby.player1Wallet?.toLowerCase() === playerWhoTimedOut;
-  const isP2 = lobby.player2Wallet?.toLowerCase() === playerWhoTimedOut;
+  const isP1 = walletMatches(lobby.player1Wallet, playerWhoTimedOut);
+  const isP2 = walletMatches(lobby.player2Wallet, playerWhoTimedOut);
   if (!isP1 && !isP2) {
     return res.status(403).json({ error: "Not a player in this game" });
   }
@@ -822,8 +824,8 @@ app.post("/api/lobbies/:lobbyId/timeout", (req, res) => {
   log("Game finished (timeout)", { lobbyId, winner: lobby.winner });
   const timeoutPayload = { lobbyId, fen: lobby.fen, winner: lobby.winner, status: "finished", timeout: true };
   io.to(lobbyId).emit("move", timeoutPayload);
-  const tp1 = lobby.player1Wallet?.toLowerCase();
-  const tp2 = lobby.player2Wallet?.toLowerCase();
+  const tp1 = lobby.player1Wallet?.startsWith("0x") ? lobby.player1Wallet?.toLowerCase() : lobby.player1Wallet;
+  const tp2 = lobby.player2Wallet?.startsWith("0x") ? lobby.player2Wallet?.toLowerCase() : lobby.player2Wallet;
   if (tp1) io.to(`wallet:${tp1}`).emit("move", timeoutPayload);
   if (tp2) io.to(`wallet:${tp2}`).emit("move", timeoutPayload);
   resolveAllEscrowsIfNeeded(lobby).catch(() => {});
@@ -838,16 +840,10 @@ app.post("/api/lobbies/:lobbyId/move", async (req, res) => {
     return res.status(400).json({ error: "Invalid lobby id" });
   }
   const { message, signature, from, to, promotion } = req.body || {};
-  if (!message || !signature) {
-    return res.status(400).json({ error: "message and signature required" });
-  }
   if (!from || !to) {
     return res.status(400).json({ error: "from and to squares required" });
   }
-  if (!isSignatureFresh(message)) {
-    return res.status(400).json({ error: "Signature expired or invalid timestamp" });
-  }
-  const playerWallet = recoverAddress(message, signature);
+  const playerWallet = authWallet(req.body);
   if (!playerWallet) {
     return res.status(400).json({ error: "Invalid signature" });
   }
@@ -871,8 +867,8 @@ app.post("/api/lobbies/:lobbyId/move", async (req, res) => {
 
   // Verify it's this player's turn
   const turn = (lobby.fen || "").split(" ")[1] || "w";
-  const currentPlayerWallet = turn === "w" ? lobby.player1Wallet?.toLowerCase() : lobby.player2Wallet?.toLowerCase();
-  if (playerWallet !== currentPlayerWallet) {
+  const currentPlayerWallet = turn === "w" ? lobby.player1Wallet : lobby.player2Wallet;
+  if (!walletMatches(playerWallet, currentPlayerWallet)) {
     return res.status(400).json({ error: "not_your_turn", fen: lobby.fen, turn });
   }
 
@@ -895,8 +891,8 @@ app.post("/api/lobbies/:lobbyId/move", async (req, res) => {
     ...(result.whiteTimeSec != null || result.blackTimeSec != null ? { whiteTimeSec: result.whiteTimeSec, blackTimeSec: result.blackTimeSec } : {}),
   };
   io.to(lobbyId).emit("move", movePayload);
-  const p1w = lobby.player1Wallet?.toLowerCase();
-  const p2w = lobby.player2Wallet?.toLowerCase();
+  const p1w = lobby.player1Wallet?.startsWith("0x") ? lobby.player1Wallet?.toLowerCase() : lobby.player1Wallet;
+  const p2w = lobby.player2Wallet?.startsWith("0x") ? lobby.player2Wallet?.toLowerCase() : lobby.player2Wallet;
   if (p1w) io.to(`wallet:${p1w}`).emit("move", movePayload);
   if (p2w) io.to(`wallet:${p2w}`).emit("move", movePayload);
 
@@ -922,23 +918,14 @@ io.on("connection", (socket) => {
   log("Socket connected", { socketId: socket.id });
 
   socket.on("register_wallet", (payload) => {
-    const message = payload?.message;
-    const signature = payload?.signature;
-    if (!message || !signature) {
-      socket.emit("register_wallet_error", { reason: "message and signature required" });
-      return;
-    }
-    if (!isSignatureFresh(message)) {
-      socket.emit("register_wallet_error", { reason: "Signature expired or invalid timestamp" });
-      return;
-    }
-    const wallet = recoverAddress(message, signature);
+    const wallet = authWallet(payload);
     if (!wallet) {
       socket.emit("register_wallet_error", { reason: "Invalid signature" });
       return;
     }
-    socket.join(`wallet:${wallet}`);
-    socketToWallet.set(socket.id, wallet);
+    const roomKey = wallet.startsWith("0x") ? wallet.toLowerCase() : wallet;
+    socket.join(`wallet:${roomKey}`);
+    socketToWallet.set(socket.id, roomKey);
     log("Socket register_wallet", { socketId: socket.id, wallet: wallet.slice(0, 10) + "…" });
   });
 
@@ -961,9 +948,9 @@ io.on("connection", (socket) => {
       socket.emit("join_lobby_error", { reason: "Lobby not found" });
       return;
     }
-    const pw = wallet?.toLowerCase();
-    const isP1 = lobby.player1Wallet?.toLowerCase() === pw;
-    const isP2 = lobby.player2Wallet?.toLowerCase() === pw;
+    const pw = wallet;
+    const isP1 = walletMatches(lobby.player1Wallet, pw);
+    const isP2 = walletMatches(lobby.player2Wallet, pw);
     if (!isP1 && !isP2) {
       socket.emit("join_lobby_error", { reason: "Not a player in this lobby" });
       return;
@@ -1015,8 +1002,8 @@ io.on("connection", (socket) => {
       return;
     }
     const turn = (lobby.fen || "").split(" ")[1] || "w";
-    const currentPlayerWallet = turn === "w" ? lobby.player1Wallet?.toLowerCase() : lobby.player2Wallet?.toLowerCase();
-    if (wallet !== currentPlayerWallet) {
+    const currentPlayerWallet = turn === "w" ? lobby.player1Wallet : lobby.player2Wallet;
+    if (!walletMatches(wallet, currentPlayerWallet)) {
       log("Socket move rejected (not your turn)", { socketId: socket.id, lobbyId });
       socket.emit("move_error", { reason: "not_your_turn" });
       return;
@@ -1051,9 +1038,8 @@ io.on("connection", (socket) => {
   /** Get player color for a wallet in a lobby. Returns "white" | "black" | null. */
   function getPlayerColor(lobby, wallet) {
     if (!lobby || !wallet) return null;
-    const w = wallet.toLowerCase();
-    if (lobby.player1Wallet?.toLowerCase() === w) return "white";
-    if (lobby.player2Wallet?.toLowerCase() === w) return "black";
+    if (walletMatches(lobby.player1Wallet, wallet)) return "white";
+    if (walletMatches(lobby.player2Wallet, wallet)) return "black";
     return null;
   }
 
